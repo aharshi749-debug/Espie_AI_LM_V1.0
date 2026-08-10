@@ -22,7 +22,6 @@ DATE OF THE DUMP: 6/28/2026
 Time: 12:48
 Dump starts after this small line.
 =======================================================     
-
 1.6 million paramaters
 teaching the following
 -cognitive tasks
@@ -217,7 +216,7 @@ Espie:>>>
 
 
 
-if there was a RAM issue then the following might happen
+
 
 Hi the- WARNING: INTERCEPTION WITH RAM 
 Error: Ram in DRAM is too low. 
@@ -226,3 +225,36 @@ Espie used 1.4kb 0.05<1.4 KB sram
 General Random Acess Memory Fault Protection Sub-System: We have halted your conversation because your RAM is too low. 
 Halting chat... 
 HALT: 0x10000 program has halted. type any key into serial monitor to end the program.
+
+
+though this is experemintal, this may the the more User like Admin Panel that will be actually possibly Implemented
+in v2.1
+
+
+Here is the cleaner approach:
+
+Loading Admin Panel and Settings + Assets
+100%
+Done
+
+Espie ECCM 
+(c) Aharshi Deb, All rights reserved
+Commands
+Wifi ON
+Wifi OFF
+Wifi "YourWifiName" "Password"
+Boot Model ____
+Boot System files from ____
+Revert Settings to the Defaults
+Partition/Format/Change Flash
+Path: 0x3A0000
+>>>
+
+would be a more cleaner approach and more easier than 5:511_0xA400000 or confusing commands such as
+
+BOOT:0x3A0000/ESP32PART/5:1249:00000FFFFFX
+
+and it is more user friendly as this could be easier to work with and then the ESP32 could not brick itself
+
+
+
