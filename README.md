@@ -59,7 +59,7 @@ Step 2: Copy the ino file into arduino ide
 
 Step 3: Compile and flash onto a ESP32 chip 
 
-Step 4: Start training the py file, wait until its trained, when its done it should spit out a file named "Espie_1_6_v2m.bin" then go to this site
+Step 4: Start training the py file, wait until its trained, when its done it should spit out a file named "Espie_1_6_v6m.bin" or a similar file, then go to this site
 
 https://espressif.github.io/esptool-js/
 
@@ -92,17 +92,29 @@ and its extremely efficient!
 
 internally its
 Input
+
  ↓
+
 Parser
+
  ↓
+
 Intent / context
+
  ↓
+
 Script selection/generation
+
  ↓
+
 Small model inference
+
  ↓
+
 Sampling
+
  ↓
+
 Output  (I HATE COPY AND PASTING "↓" HELP!)
 
 # Credits to
@@ -143,7 +155,7 @@ Toolchain:
 
 Espie.ino
 
-param.py (to teach espie to get the bin
+param.py (to teach espie to get the bin)
 
 Instructions.txt
 
