@@ -1,138 +1,138 @@
-// (c) Aharshi Deb 2026, Espie AI Language Model Version 0.1 , ESP32-S3
-//Several problems have been fixed. this may be buggy.
-//Use at own risk.
+//(c) Aharshi Deb 2026
+// All rights reserved
+// Warning: use at your own risk
+
 #if !defined(ARDUINO_ARCH_ESP32)
   #error "This sketch targets Arduino-ESP32."
 #endif
 
-#include <Arduino.h>
-#include <pgmspace.h>
-#include <EEPROM.h>
-
 #include "training_data.h"
+#include <EEPROM.h>
+#include <pgmspace.h>
+#include <Arduino.h>
 
-#define PUNCT_HASH(c) (0xFF000000UL + (uint8_t)(c))
+#define PX_MARK(c) (0xFF000000UL + (uint8_t)(c))
 
-#define MAX_ORDER       7
-#define HIST_LEN        14
-#define IN_BUF_LEN      140
-#define MAX_PROMPT_TOK  20
-#define MIN_SENT_WORDS  4
-#define MAX_SENT_WORDS  26
+#define NGRAM_DEPTH       7
+#define MEMORY_DEPTH        14
+#define LINE_CAP      140
+#define QUERY_CAP  20
+#define SENT_MIN  4
+#define SENT_MAX  26
 
-static uint8_t  g_maxOrder = 5;
-static uint8_t  g_temp = 22;
-static uint16_t g_budget = 55;
-static bool     g_showThink = true;
+static uint8_t  cfgOrder = 5;
+static uint8_t  cfgTemp = 22;
+static uint16_t cfgBudget = 55;
+static bool     cfgTrace = true;
 
-typedef uint32_t whash_t;
+typedef uint32_t token_hash_t;
 
-struct Cand {
+struct CandidateSlot {
   uint32_t start;
   uint16_t count;
   uint16_t len;
   uint8_t type;
 };
 
-#define MAX_SEG 32
+#define BAND_LIMIT 32
 
-struct Segment {
+struct CorpusSection {
   uint32_t start;
   uint32_t end;
   uint32_t nameStart;
-  whash_t nameHash;
+  token_hash_t nameHash;
   uint16_t nameLen;
 };
 
-static uint32_t g_rng = 0x1F123BB5UL;
+static uint32_t randomState = 0x1F123BB5UL;
 
-static inline uint32_t rnd32() {
-  g_rng ^= g_rng << 13;
-  g_rng ^= g_rng >> 17;
-  g_rng ^= g_rng << 5;
-  return g_rng;
+static inline uint32_t nextRandom32() {
+  randomState ^= randomState << 13;
+  randomState ^= randomState >> 17;
+  randomState ^= randomState << 5;
+  return randomState;
 }
 
-static inline uint16_t rndBelow(uint16_t n) {
-  return n ? (uint16_t)(rnd32() % n) : 0;
+static inline uint16_t randomBelow(uint16_t n) {
+  return n ? (uint16_t)(nextRandom32() % n) : 0;
 }
 
-#define EEP_SIZE 4096
-#define EEP_HDR 4
-#define EEP_M0 0x4D
-#define EEP_M1 0x4C
+#define STORE_CAP 4096
+#define STORE_HEAD 4
+#define STORE_SIG_A 0x4D
+#define STORE_SIG_B 0x4C
 
-static uint32_t g_flashLen = 0;
-static uint16_t g_eepLen = 0;
+static uint32_t flashBytes = 0;
+static uint16_t storedBytes = 0;
 
-static inline uint8_t eepRead(uint16_t a) {
+static inline uint8_t storageRead(uint16_t a) {
   return EEPROM.read(a);
 }
 
-static inline void eepWrite(uint16_t a, uint8_t v) {
+static inline void storageWrite(uint16_t a, uint8_t v) {
   EEPROM.write(a, v);
 }
 
-static inline void eepCommit() {
+static inline void storageCommit() {
   EEPROM.commit();
 }
 
-static void eepSetLen(uint16_t n) {
-  if (n > EEP_SIZE - EEP_HDR) n = 0;
+static void storageSetLength(uint16_t n) {
+  if (n > STORE_CAP - STORE_HEAD) n = 0;
 
-  g_eepLen = n;
+  storedBytes = n;
 
-  eepWrite(0, EEP_M0);
-  eepWrite(1, EEP_M1);
-  eepWrite(2, (uint8_t)(n & 0xFF));
-  eepWrite(3, (uint8_t)(n >> 8));
-  eepCommit();
+  storageWrite(0, STORE_SIG_A);
+  storageWrite(1, STORE_SIG_B);
+  storageWrite(2, (uint8_t)(n & 0xFF));
+  storageWrite(3, (uint8_t)(n >> 8));
+  storageCommit();
 }
 
-static uint32_t g_scanHi = 0;
+static uint32_t scanLimit = 0;
 
-static uint32_t g_rLo[MAX_SEG + 1];
-static uint32_t g_rHi[MAX_SEG + 1];
+static uint32_t rangeBegin[BAND_LIMIT + 1];
+static uint32_t rangeEnd[BAND_LIMIT + 1];
 
-static uint8_t g_rN = 0;
+static uint8_t rangeCount = 0;
 
-static Segment g_seg[MAX_SEG];
-static uint8_t g_segN = 0;
+static CorpusSection sections[BAND_LIMIT];
+static uint8_t sectionCount = 0;
 
-static uint8_t g_forceSeg = 255;
-static uint8_t g_lastSeg = 255;
+static uint8_t forcedSection = 255;
+static uint8_t previousSection = 255;
 
-static bool g_creative = true;
+static bool creativeMode = true;
 
-static inline uint8_t effOrder() {
-  return g_creative ? g_maxOrder : MAX_ORDER;
+static inline uint8_t activeOrder() {
+  return creativeMode ? cfgOrder : NGRAM_DEPTH;
 }
 
-static uint8_t g_storySeg = 255;
+static uint8_t storySection = 255;
 
-static uint16_t g_segHits[MAX_SEG];
+static uint16_t sectionHits[BAND_LIMIT];
 
-static inline uint32_t corpusLen() {
-  return g_flashLen + (uint32_t)g_eepLen;
+static inline uint32_t modelLength() {
+  return flashBytes + (uint32_t)storedBytes;
 }
 
-static inline uint8_t corpusByte(uint32_t i) {
-  if (i < g_flashLen)
+static inline uint8_t modelByte(uint32_t i) {
+  if (i < flashBytes)
     return pgm_read_byte(&TRAIN_TEXT[i]);
 
-  uint32_t e = i - g_flashLen;
+  uint32_t e = i - flashBytes;
 
-  if (e >= g_eepLen)
+  if (e >= storedBytes)
     return 0;
 
-  return eepRead(EEP_HDR + (uint16_t)e);
+  return storageRead(STORE_HEAD + (uint16_t)e);
 }
 
-static inline uint8_t lc(uint8_t c) {
+static inline uint8_t lowerAscii(uint8_t c) {
   return (c >= 'A' && c <= 'Z') ? (uint8_t)(c + 32) : c;
 }
 
-static inline bool isWordChar(uint8_t c) {
+static inline bool wordChar(uint8_t c) {
   return
     (c >= 'a' && c <= 'z') ||
     (c >= 'A' && c <= 'Z') ||
@@ -142,7 +142,7 @@ static inline bool isWordChar(uint8_t c) {
     c == '_';
 }
 
-static inline bool isSectionNameChar(uint8_t c) {
+static inline bool sectionChar(uint8_t c) {
   return
     (c >= 'a' && c <= 'z') ||
     (c >= 'A' && c <= 'Z') ||
@@ -151,7 +151,7 @@ static inline bool isSectionNameChar(uint8_t c) {
     c == '-';
 }
 
-static inline bool isPunctChar(uint8_t c) {
+static inline bool punctChar(uint8_t c) {
   return
     c == '.' ||
     c == '!' ||
@@ -161,32 +161,32 @@ static inline bool isPunctChar(uint8_t c) {
     c == ':';
 }
 
-static inline bool isTerminal(uint8_t c) {
+static inline bool terminalChar(uint8_t c) {
   return c == '.' || c == '!' || c == '?';
 }
 
-static inline whash_t foldHash(uint32_t h) {
+static inline token_hash_t normalizeHash(uint32_t h) {
   return h;
 }
 
-static uint8_t nextToken(
+static uint8_t readToken(
   uint32_t &pos,
   uint32_t &start,
   uint16_t &len,
-  whash_t &hash
+  token_hash_t &hash
 ) {
-  const uint32_t n = g_scanHi;
+  const uint32_t n = scanLimit;
 
   while (pos < n) {
-    uint8_t c = corpusByte(pos);
+    uint8_t c = modelByte(pos);
 
-    if (isWordChar(c))
+    if (wordChar(c))
       break;
 
-    if (isPunctChar(c)) {
+    if (punctChar(c)) {
       start = pos;
       len = 1;
-      hash = PUNCT_HASH(c);
+      hash = PX_MARK(c);
       pos++;
       return 2;
     }
@@ -203,12 +203,12 @@ static uint8_t nextToken(
   uint16_t l = 0;
 
   while (pos < n) {
-    uint8_t c = corpusByte(pos);
+    uint8_t c = modelByte(pos);
 
-    if (!isWordChar(c))
+    if (!wordChar(c))
       break;
 
-    h ^= lc(c);
+    h ^= lowerAscii(c);
     h *= 16777619UL;
 
     pos++;
@@ -218,20 +218,20 @@ static uint8_t nextToken(
   }
 
   len = l;
-  hash = foldHash(h);
+  hash = normalizeHash(h);
 
   return 1;
 }
 
-static whash_t hashRamWord(const char *s, uint16_t n) {
+static token_hash_t hashInputWord(const char *s, uint16_t n) {
   uint32_t h = 2166136261UL;
 
   for (uint16_t i = 0; i < n; i++) {
-    h ^= lc((uint8_t)s[i]);
+    h ^= lowerAscii((uint8_t)s[i]);
     h *= 16777619UL;
   }
 
-  return foldHash(h);
+  return normalizeHash(h);
 }
 
 static const char STOPWORDS[] PROGMEM =
@@ -253,43 +253,43 @@ static const char META_WORDS[] PROGMEM =
 "short long little bit brief quick nice good paragraph story stories tale "
 "essay text piece something anything more another";
 
-static whash_t g_ctx[MAX_ORDER];
-static uint8_t g_ctxN = 0;
+static token_hash_t contextStack[NGRAM_DEPTH];
+static uint8_t contextDepth = 0;
 
-static void ctxReset() {
-  g_ctxN = 0;
+static void clearContext() {
+  contextDepth = 0;
 }
 
-static void ctxSentenceStartFwd();
+static void forwardSentenceReset();
 
-static void ctxPush(whash_t h) {
-  for (int8_t i = MAX_ORDER - 1; i > 0; i--)
-    g_ctx[i] = g_ctx[i - 1];
+static void pushContext(token_hash_t h) {
+  for (int8_t i = NGRAM_DEPTH - 1; i > 0; i--)
+    contextStack[i] = contextStack[i - 1];
 
-  g_ctx[0] = h;
+  contextStack[0] = h;
 
-  if (g_ctxN < MAX_ORDER)
-    g_ctxN++;
+  if (contextDepth < NGRAM_DEPTH)
+    contextDepth++;
 }
 
-static void ctxSentenceStart() {
-  ctxReset();
-  ctxPush(PUNCT_HASH('.'));
+static void resetAtSentence() {
+  clearContext();
+  pushContext(PX_MARK('.'));
 }
 
-static void ctxSentenceStartFwd() {
-  ctxSentenceStart();
+static void forwardSentenceReset() {
+  resetAtSentence();
 }
 
-#define KEY_SEED 2166136261UL
+#define HASH_ORIGIN 2166136261UL
 
-static inline uint32_t mixKey(uint32_t k, whash_t h) {
+static inline uint32_t combineHash(uint32_t k, token_hash_t h) {
   k ^= h;
   k *= 16777619UL;
   return k;
 }
 
-static bool inWordList(const char *list, whash_t h) {
+static bool wordListContains(const char *list, token_hash_t h) {
   uint32_t i = 0;
   uint32_t acc = 2166136261UL;
   uint16_t n = 0;
@@ -297,12 +297,12 @@ static bool inWordList(const char *list, whash_t h) {
   for (;;) {
     uint8_t c = pgm_read_byte(&list[i]);
 
-    if (isWordChar(c)) {
-      acc ^= lc(c);
+    if (wordChar(c)) {
+      acc ^= lowerAscii(c);
       acc *= 16777619UL;
       n++;
     } else {
-      if (n && foldHash(acc) == h)
+      if (n && normalizeHash(acc) == h)
         return true;
 
       acc = 2166136261UL;
@@ -316,75 +316,75 @@ static bool inWordList(const char *list, whash_t h) {
   }
 }
 
-static inline bool isProperNoun(whash_t h) {
-  return inWordList(TRAIN_PROPER, h);
+static inline bool knownName(token_hash_t h) {
+  return wordListContains(TRAIN_PROPER, h);
 }
 
-#define MAX_TOPIC 8
+#define TOPIC_CAP 8
 
-static whash_t g_topicWord[MAX_TOPIC];
-static uint8_t g_topicWordN = 0;
+static token_hash_t topicKeys[TOPIC_CAP];
+static uint8_t topicKeyCount = 0;
 
-static bool isTopicWord(whash_t h) {
-  for (uint8_t i = 0; i < g_topicWordN; i++)
-    if (g_topicWord[i] == h)
+static bool topicContains(token_hash_t h) {
+  for (uint8_t i = 0; i < topicKeyCount; i++)
+    if (topicKeys[i] == h)
       return true;
 
   return false;
 }
 
-static bool isStrongTopicWord(whash_t h) {
-  if (!isTopicWord(h))
+static bool strongTopic(token_hash_t h) {
+  if (!topicContains(h))
     return false;
 
-  if (inWordList(STOPWORDS, h))
+  if (wordListContains(STOPWORDS, h))
     return false;
 
-  if (inWordList(META_WORDS, h))
+  if (wordListContains(META_WORDS, h))
     return false;
 
   return true;
 }
 
-static Cand g_cand[MAX_ORDER + 1];
-static Cand g_startCand;
+static CandidateSlot candidateTable[NGRAM_DEPTH + 1];
+static CandidateSlot sentenceStart;
 
-static uint32_t g_corpusTokens = 0;
+static uint32_t tokenTotal = 0;
 
-static whash_t g_topicCtx[MAX_ORDER];
-static uint8_t g_topicCtxN = 0;
+static token_hash_t topicContext[NGRAM_DEPTH];
+static uint8_t topicContextDepth = 0;
 
-static uint16_t g_topicHits = 0;
+static uint16_t topicMatchCount = 0;
 
-static void scanCorpus(uint8_t maxOrder) {
-  uint32_t target[MAX_ORDER + 1];
+static void indexModel(uint8_t maxOrder) {
+  uint32_t target[NGRAM_DEPTH + 1];
 
-  uint8_t hi = g_ctxN;
+  uint8_t hi = contextDepth;
 
   if (hi > maxOrder)
     hi = maxOrder;
 
   {
-    uint32_t k = KEY_SEED;
+    uint32_t k = HASH_ORIGIN;
 
     for (uint8_t j = 0; j < hi; j++) {
-      k = mixKey(k, g_ctx[j]);
+      k = combineHash(k, contextStack[j]);
       target[j + 1] = k;
     }
   }
 
-  for (uint8_t k = 0; k <= MAX_ORDER; k++)
-    g_cand[k].count = 0;
+  for (uint8_t k = 0; k <= NGRAM_DEPTH; k++)
+    candidateTable[k].count = 0;
 
-  g_startCand.count = 0;
+  sentenceStart.count = 0;
 
-  whash_t ring[MAX_ORDER];
+  token_hash_t ring[NGRAM_DEPTH];
   uint8_t ringN = 0;
 
   uint32_t pos = 0;
   uint32_t start;
 
-  whash_t hash;
+  token_hash_t hash;
 
   uint16_t len;
   uint8_t type;
@@ -393,28 +393,28 @@ static void scanCorpus(uint8_t maxOrder) {
 
   uint32_t ntok = 0;
 
-  whash_t ssRing[MAX_ORDER];
+  token_hash_t ssRing[NGRAM_DEPTH];
   uint8_t ssRingN = 0;
   uint16_t ssAge = 0;
 
   bool ssValid = false;
 
-  g_topicHits = 0;
-  g_topicCtxN = 0;
+  topicMatchCount = 0;
+  topicContextDepth = 0;
 
-  for (uint8_t r = 0; r < g_rN; r++) {
-    pos = g_rLo[r];
-    g_scanHi = g_rHi[r];
+  for (uint8_t r = 0; r < rangeCount; r++) {
+    pos = rangeBegin[r];
+    scanLimit = rangeEnd[r];
 
     ringN = 0;
     atSentStart = true;
     ssValid = false;
 
-    while ((type = nextToken(pos, start, len, hash)) != 0) {
+    while ((type = readToken(pos, start, len, hash)) != 0) {
       ntok++;
 
       if (type == 1 && atSentStart) {
-        for (uint8_t j = 0; j < MAX_ORDER; j++)
+        for (uint8_t j = 0; j < NGRAM_DEPTH; j++)
           ssRing[j] = ring[j];
 
         ssRingN = ringN;
@@ -428,45 +428,45 @@ static void scanCorpus(uint8_t maxOrder) {
         type == 1 &&
         ssValid &&
         ssAge <= 12 &&
-        g_topicWordN &&
-        isStrongTopicWord(hash)
+        topicKeyCount &&
+        strongTopic(hash)
       ) {
-        g_topicHits++;
+        topicMatchCount++;
 
-        if (rndBelow(g_topicHits) == 0) {
-          for (uint8_t j = 0; j < MAX_ORDER; j++)
-            g_topicCtx[j] = ssRing[j];
+        if (randomBelow(topicMatchCount) == 0) {
+          for (uint8_t j = 0; j < NGRAM_DEPTH; j++)
+            topicContext[j] = ssRing[j];
 
-          g_topicCtxN = ssRingN;
+          topicContextDepth = ssRingN;
         }
 
         ssValid = false;
       }
 
       if (type == 1 && atSentStart) {
-        g_startCand.count++;
+        sentenceStart.count++;
 
-        if (rndBelow(g_startCand.count) == 0) {
-          g_startCand.start = start;
-          g_startCand.len = len;
-          g_startCand.type = 1;
+        if (randomBelow(sentenceStart.count) == 0) {
+          sentenceStart.start = start;
+          sentenceStart.len = len;
+          sentenceStart.type = 1;
         }
       }
 
       if (ringN && hi) {
-        uint32_t k = KEY_SEED;
+        uint32_t k = HASH_ORIGIN;
 
         uint8_t lim = (ringN < hi) ? ringN : hi;
 
         for (uint8_t j = 0; j < lim; j++) {
-          k = mixKey(k, ring[j]);
+          k = combineHash(k, ring[j]);
 
           if (k == target[j + 1]) {
-            Cand &c = g_cand[j + 1];
+            CandidateSlot &c = candidateTable[j + 1];
 
             c.count++;
 
-            if (rndBelow(c.count) == 0) {
+            if (randomBelow(c.count) == 0) {
               c.start = start;
               c.len = len;
               c.type = type;
@@ -475,54 +475,54 @@ static void scanCorpus(uint8_t maxOrder) {
         }
       }
 
-      for (int8_t i = MAX_ORDER - 1; i > 0; i--)
+      for (int8_t i = NGRAM_DEPTH - 1; i > 0; i--)
         ring[i] = ring[i - 1];
 
       ring[0] = hash;
 
-      if (ringN < MAX_ORDER)
+      if (ringN < NGRAM_DEPTH)
         ringN++;
 
       atSentStart =
         (type == 2) &&
-        isTerminal(corpusByte(start));
+        terminalChar(modelByte(start));
     }
   }
 
-  g_corpusTokens = ntok;
+  tokenTotal = ntok;
 }
 
-static bool hashSectionName(
+static bool hashSection(
   uint32_t start,
   uint32_t end,
   uint32_t &nameStart,
   uint16_t &nameLen,
-  whash_t &nameHash
+  token_hash_t &nameHash
 ) {
   uint32_t p = start;
 
   while (p < end && (
-    corpusByte(p) == ' ' ||
-    corpusByte(p) == '\t'
+    modelByte(p) == ' ' ||
+    modelByte(p) == '\t'
   ))
     p++;
 
   if (p + 7 <= end &&
-      lc(corpusByte(p)) == 's' &&
-      lc(corpusByte(p + 1)) == 'e' &&
-      lc(corpusByte(p + 2)) == 'c' &&
-      lc(corpusByte(p + 3)) == 't' &&
-      lc(corpusByte(p + 4)) == 'i' &&
-      lc(corpusByte(p + 5)) == 'o' &&
-      lc(corpusByte(p + 6)) == 'n' &&
+      lowerAscii(modelByte(p)) == 's' &&
+      lowerAscii(modelByte(p + 1)) == 'e' &&
+      lowerAscii(modelByte(p + 2)) == 'c' &&
+      lowerAscii(modelByte(p + 3)) == 't' &&
+      lowerAscii(modelByte(p + 4)) == 'i' &&
+      lowerAscii(modelByte(p + 5)) == 'o' &&
+      lowerAscii(modelByte(p + 6)) == 'n' &&
       (p + 7 == end ||
-       corpusByte(p + 7) == ' ' ||
-       corpusByte(p + 7) == '\t')
+       modelByte(p + 7) == ' ' ||
+       modelByte(p + 7) == '\t')
   ) {
     p += 7;
 
     while (p < end &&
-           (corpusByte(p) == ' ' || corpusByte(p) == '\t'))
+           (modelByte(p) == ' ' || modelByte(p) == '\t'))
       p++;
   }
 
@@ -532,12 +532,12 @@ static bool hashSectionName(
   uint16_t n = 0;
 
   while (p < end) {
-    uint8_t c = corpusByte(p);
+    uint8_t c = modelByte(p);
 
-    if (!isSectionNameChar(c))
+    if (!sectionChar(c))
       break;
 
-    h ^= lc(c);
+    h ^= lowerAscii(c);
     h *= 16777619UL;
 
     p++;
@@ -550,19 +550,19 @@ static bool hashSectionName(
     return false;
 
   nameLen = n;
-  nameHash = foldHash(h);
+  nameHash = normalizeHash(h);
 
   return true;
 }
 
-static void buildSegments() {
-  g_segN = 0;
-  g_storySeg = 255;
+static void discoverSections() {
+  sectionCount = 0;
+  storySection = 255;
 
   uint32_t i = 0;
   uint32_t currentContent = 0;
 
-  while (i + 1 < g_flashLen) {
+  while (i + 1 < flashBytes) {
     if (
       pgm_read_byte(&TRAIN_TEXT[i]) == '@' &&
       pgm_read_byte(&TRAIN_TEXT[i + 1]) == '@'
@@ -570,49 +570,49 @@ static void buildSegments() {
       uint32_t lineEnd = i + 2;
 
       while (
-        lineEnd < g_flashLen &&
+        lineEnd < flashBytes &&
         pgm_read_byte(&TRAIN_TEXT[lineEnd]) != '\n'
       )
         lineEnd++;
 
       uint32_t nameStart;
       uint16_t nameLen;
-      whash_t nameHash;
+      token_hash_t nameHash;
 
-      if (hashSectionName(
+      if (hashSection(
         i + 2,
         lineEnd,
         nameStart,
         nameLen,
         nameHash
       )) {
-        if (g_segN > 0)
-          g_seg[g_segN - 1].end = i;
+        if (sectionCount > 0)
+          sections[sectionCount - 1].end = i;
 
-        if (g_segN < MAX_SEG) {
+        if (sectionCount < BAND_LIMIT) {
           uint32_t contentStart =
-            (lineEnd < g_flashLen) ? lineEnd + 1 : lineEnd;
+            (lineEnd < flashBytes) ? lineEnd + 1 : lineEnd;
 
-          g_seg[g_segN].start = contentStart;
-          g_seg[g_segN].end = g_flashLen;
-          g_seg[g_segN].nameStart = nameStart;
-          g_seg[g_segN].nameLen = nameLen;
-          g_seg[g_segN].nameHash = nameHash;
+          sections[sectionCount].start = contentStart;
+          sections[sectionCount].end = flashBytes;
+          sections[sectionCount].nameStart = nameStart;
+          sections[sectionCount].nameLen = nameLen;
+          sections[sectionCount].nameHash = nameHash;
 
           if (
             nameLen == 7 &&
-            nameHash == hashRamWord("stories", 7)
+            nameHash == hashInputWord("stories", 7)
           )
-            g_storySeg = g_segN;
+            storySection = sectionCount;
 
-          g_segN++;
+          sectionCount++;
           currentContent = contentStart;
         }
       }
 
       i = lineEnd;
 
-      if (i < g_flashLen)
+      if (i < flashBytes)
         i++;
 
       continue;
@@ -621,108 +621,108 @@ static void buildSegments() {
     i++;
   }
 
-  if (g_segN == 0 && g_flashLen) {
-    g_seg[0].start = 0;
-    g_seg[0].end = g_flashLen;
-    g_seg[0].nameStart = 0xFFFFFFFFUL;
-    g_seg[0].nameLen = 4;
-    g_seg[0].nameHash = hashRamWord("main", 4);
-    g_segN = 1;
+  if (sectionCount == 0 && flashBytes) {
+    sections[0].start = 0;
+    sections[0].end = flashBytes;
+    sections[0].nameStart = 0xFFFFFFFFUL;
+    sections[0].nameLen = 4;
+    sections[0].nameHash = hashInputWord("main", 4);
+    sectionCount = 1;
   }
 
-  if (g_eepLen && g_segN < MAX_SEG) {
-    g_seg[g_segN].start = g_flashLen;
-    g_seg[g_segN].end = corpusLen();
-    g_seg[g_segN].nameStart = 0xFFFFFFFFUL;
-    g_seg[g_segN].nameLen = 7;
-    g_seg[g_segN].nameHash = hashRamWord("learned", 7);
-    g_segN++;
+  if (storedBytes && sectionCount < BAND_LIMIT) {
+    sections[sectionCount].start = flashBytes;
+    sections[sectionCount].end = modelLength();
+    sections[sectionCount].nameStart = 0xFFFFFFFFUL;
+    sections[sectionCount].nameLen = 7;
+    sections[sectionCount].nameHash = hashInputWord("learned", 7);
+    sectionCount++;
   }
 
-  g_storySeg = 255;
+  storySection = 255;
 
-  whash_t sh = hashRamWord("stories", 7);
+  token_hash_t sh = hashInputWord("stories", 7);
 
-  for (uint8_t k = 0; k < g_segN; k++) {
-    if (g_seg[k].nameHash == sh) {
-      g_storySeg = k;
+  for (uint8_t k = 0; k < sectionCount; k++) {
+    if (sections[k].nameHash == sh) {
+      storySection = k;
       break;
     }
   }
 }
 
-static void printSegName(uint8_t k) {
-  if (k >= g_segN)
+static void showSectionName(uint8_t k) {
+  if (k >= sectionCount)
     return;
 
-  if (g_seg[k].nameStart == 0xFFFFFFFFUL) {
+  if (sections[k].nameStart == 0xFFFFFFFFUL) {
     Serial.print(F("learned"));
     return;
   }
 
-  for (uint16_t j = 0; j < g_seg[k].nameLen; j++)
+  for (uint16_t j = 0; j < sections[k].nameLen; j++)
     Serial.print(
       (char)pgm_read_byte(
-        &TRAIN_TEXT[g_seg[k].nameStart + j]
+        &TRAIN_TEXT[sections[k].nameStart + j]
       )
     );
 }
 
-static void listSegments() {
-  for (uint8_t k = 0; k < g_segN; k++) {
+static void showSections() {
+  for (uint8_t k = 0; k < sectionCount; k++) {
     if (k)
       Serial.print(F(", "));
 
-    printSegName(k);
+    showSectionName(k);
   }
 }
 
-static void setScan(uint8_t seg) {
-  g_rN = 0;
+static void selectScan(uint8_t seg) {
+  rangeCount = 0;
 
-  if (!g_segN) {
-    g_rLo[0] = 0;
-    g_rHi[0] = corpusLen();
-    g_rN = 1;
+  if (!sectionCount) {
+    rangeBegin[0] = 0;
+    rangeEnd[0] = modelLength();
+    rangeCount = 1;
     return;
   }
 
-  if (seg < g_segN) {
-    g_rLo[0] = g_seg[seg].start;
-    g_rHi[0] = g_seg[seg].end;
-    g_rN = 1;
+  if (seg < sectionCount) {
+    rangeBegin[0] = sections[seg].start;
+    rangeEnd[0] = sections[seg].end;
+    rangeCount = 1;
     return;
   }
 
-  for (uint8_t k = 0; k < g_segN && g_rN < MAX_SEG + 1; k++) {
-    g_rLo[g_rN] = g_seg[k].start;
-    g_rHi[g_rN] = g_seg[k].end;
-    g_rN++;
+  for (uint8_t k = 0; k < sectionCount && rangeCount < BAND_LIMIT + 1; k++) {
+    rangeBegin[rangeCount] = sections[k].start;
+    rangeEnd[rangeCount] = sections[k].end;
+    rangeCount++;
   }
 }
 
-static uint16_t scoreSegments() {
+static uint16_t measureSections() {
   uint16_t total = 0;
 
-  for (uint8_t k = 0; k < g_segN; k++) {
+  for (uint8_t k = 0; k < sectionCount; k++) {
     uint16_t cnt = 0;
 
-    uint32_t pos = g_seg[k].start;
+    uint32_t pos = sections[k].start;
     uint32_t start;
 
-    whash_t hash;
+    token_hash_t hash;
 
     uint16_t len;
     uint8_t type;
 
-    g_scanHi = g_seg[k].end;
+    scanLimit = sections[k].end;
 
-    while ((type = nextToken(pos, start, len, hash)) != 0) {
-      if (type == 1 && isStrongTopicWord(hash))
+    while ((type = readToken(pos, start, len, hash)) != 0) {
+      if (type == 1 && strongTopic(hash))
         cnt++;
     }
 
-    g_segHits[k] = cnt;
+    sectionHits[k] = cnt;
 
     if (UINT16_MAX - total < cnt)
       total = UINT16_MAX;
@@ -733,16 +733,16 @@ static uint16_t scoreSegments() {
   return total;
 }
 
-static uint8_t bestSegment(bool skipStory) {
+static uint8_t chooseSection(bool skipStory) {
   uint8_t bi = 255;
   uint16_t best = 0;
 
-  for (uint8_t k = 0; k < g_segN; k++) {
-    if (skipStory && k == g_storySeg)
+  for (uint8_t k = 0; k < sectionCount; k++) {
+    if (skipStory && k == storySection)
       continue;
 
-    if (g_segHits[k] > best) {
-      best = g_segHits[k];
+    if (sectionHits[k] > best) {
+      best = sectionHits[k];
       bi = k;
     }
   }
@@ -750,150 +750,150 @@ static uint8_t bestSegment(bool skipStory) {
   return bi;
 }
 
-static bool g_needCap = true;
-static bool g_started = false;
+static bool capitalizeNext = true;
+static bool outputStarted = false;
 
-static bool keepCase(
+static bool preserveCase(
   uint32_t start,
   uint16_t len,
-  whash_t hash
+  token_hash_t hash
 ) {
   for (uint16_t i = 1; i < len; i++) {
-    uint8_t c = corpusByte(start + i);
+    uint8_t c = modelByte(start + i);
 
     if (c >= 'A' && c <= 'Z')
       return true;
   }
 
-  if (len == 1 && corpusByte(start) == 'I')
+  if (len == 1 && modelByte(start) == 'I')
     return true;
 
-  return isProperNoun(hash);
+  return knownName(hash);
 }
 
-static void emit(
+static void writeToken(
   uint32_t start,
   uint16_t len,
   uint8_t type,
-  whash_t hash
+  token_hash_t hash
 ) {
   if (type == 2) {
-    Serial.print((char)corpusByte(start));
+    Serial.print((char)modelByte(start));
 
-    if (isTerminal(corpusByte(start)))
-      g_needCap = true;
+    if (terminalChar(modelByte(start)))
+      capitalizeNext = true;
 
-    g_started = true;
+    outputStarted = true;
     return;
   }
 
-  if (g_started)
+  if (outputStarted)
     Serial.print(' ');
 
-  bool keep = keepCase(start, len, hash);
+  bool keep = preserveCase(start, len, hash);
 
   for (uint16_t i = 0; i < len; i++) {
-    uint8_t c = corpusByte(start + i);
+    uint8_t c = modelByte(start + i);
 
     if (i == 0) {
-      if (g_needCap)
+      if (capitalizeNext)
         c = (c >= 'a' && c <= 'z')
           ? (uint8_t)(c - 32)
           : c;
       else if (!keep)
-        c = lc(c);
+        c = lowerAscii(c);
     } else if (!keep) {
-      c = lc(c);
+      c = lowerAscii(c);
     }
 
     Serial.print((char)c);
   }
 
-  g_needCap = false;
-  g_started = true;
+  capitalizeNext = false;
+  outputStarted = true;
 }
 
-static whash_t g_hist[HIST_LEN];
-static uint8_t g_histN = 0;
-static uint8_t g_lastPunct = 0;
+static token_hash_t recentTokens[MEMORY_DEPTH];
+static uint8_t recentCount = 0;
+static uint8_t lastPunctuation = 0;
 
-#define POS_HIST 72
+#define POSITION_MEMORY 72
 
-static uint32_t g_posHist[POS_HIST];
-static uint8_t g_posN = 0;
+static uint32_t recentPositions[POSITION_MEMORY];
+static uint8_t recentPositionCount = 0;
 
-static void posPush(uint32_t p) {
-  for (int8_t i = POS_HIST - 1; i > 0; i--)
-    g_posHist[i] = g_posHist[i - 1];
+static void rememberPosition(uint32_t p) {
+  for (int8_t i = POSITION_MEMORY - 1; i > 0; i--)
+    recentPositions[i] = recentPositions[i - 1];
 
-  g_posHist[0] = p;
+  recentPositions[0] = p;
 
-  if (g_posN < POS_HIST)
-    g_posN++;
+  if (recentPositionCount < POSITION_MEMORY)
+    recentPositionCount++;
 }
 
-static bool posSeen(uint32_t p) {
-  for (uint8_t i = 0; i < g_posN; i++)
-    if (g_posHist[i] == p)
+static bool positionKnown(uint32_t p) {
+  for (uint8_t i = 0; i < recentPositionCount; i++)
+    if (recentPositions[i] == p)
       return true;
 
   return false;
 }
 
-static void histPush(whash_t h) {
-  for (int8_t i = HIST_LEN - 1; i > 0; i--)
-    g_hist[i] = g_hist[i - 1];
+static void rememberToken(token_hash_t h) {
+  for (int8_t i = MEMORY_DEPTH - 1; i > 0; i--)
+    recentTokens[i] = recentTokens[i - 1];
 
-  g_hist[0] = h;
+  recentTokens[0] = h;
 
-  if (g_histN < HIST_LEN)
-    g_histN++;
+  if (recentCount < MEMORY_DEPTH)
+    recentCount++;
 }
 
-static uint8_t histCount(whash_t h) {
+static uint8_t tokenFrequency(token_hash_t h) {
   uint8_t n = 0;
 
-  for (uint8_t i = 0; i < g_histN; i++)
-    if (g_hist[i] == h)
+  for (uint8_t i = 0; i < recentCount; i++)
+    if (recentTokens[i] == h)
       n++;
 
   return n;
 }
 
-static whash_t candHash(const Cand &c) {
+static token_hash_t candidateTokenHash(const CandidateSlot &c) {
   if (c.type == 2)
-    return PUNCT_HASH(corpusByte(c.start));
+    return PX_MARK(modelByte(c.start));
 
   uint32_t h = 2166136261UL;
 
   for (uint16_t i = 0; i < c.len; i++) {
-    h ^= lc(corpusByte(c.start + i));
+    h ^= lowerAscii(modelByte(c.start + i));
     h *= 16777619UL;
   }
 
-  return foldHash(h);
+  return normalizeHash(h);
 }
 
-static bool candOK(
-  const Cand &c,
+static bool candidateAllowed(
+  const CandidateSlot &c,
   uint8_t sentWords,
   bool mustEnd
 ) {
-  whash_t h = candHash(c);
+  token_hash_t h = candidateTokenHash(c);
 
-  if (c.type == 1 && posSeen(c.start))
+  if (c.type == 1 && positionKnown(c.start))
     return false;
 
   if (c.type == 2) {
-    uint8_t ch = corpusByte(c.start);
+    uint8_t ch = modelByte(c.start);
 
-    if (isTerminal(ch))
-      return sentWords >= MIN_SENT_WORDS;
+    if (terminalChar(ch))
+      return sentWords >= SENT_MIN;
 
     if (mustEnd)
       return false;
 
-    if (g_lastPunct)
+    if (lastPunctuation)
       return false;
 
     if (sentWords < 3)
@@ -905,21 +905,21 @@ static bool candOK(
   if (mustEnd)
     return false;
 
-  if (g_histN && g_hist[0] == h)
+  if (recentCount && recentTokens[0] == h)
     return false;
 
-  if (c.len > 3 && histCount(h) >= 2)
+  if (c.len > 3 && tokenFrequency(h) >= 2)
     return false;
 
   return true;
 }
 
-static uint16_t g_lastOrderSum = 0;
-static uint16_t g_lastOrderN = 0;
+static uint16_t orderScoreSum = 0;
+static uint16_t orderSampleCount = 0;
 
-static bool g_singleSentence = false;
+static bool oneSentenceMode = false;
 
-static uint16_t generate(
+static uint16_t synthesize(
   uint16_t budget,
   uint8_t sentPerPara,
   uint8_t reanchorPct
@@ -929,7 +929,7 @@ static uint16_t generate(
   uint8_t copyRun = 0;
   uint16_t sentences = 0;
 
-  g_lastPunct = 0;
+  lastPunctuation = 0;
 
   bool justAnchored = true;
   bool sentHadTopic = true;
@@ -943,39 +943,39 @@ static uint16_t generate(
       ? 65535
       : budget + 40;
 
-  g_lastOrderSum = 0;
-  g_lastOrderN = 0;
+  orderScoreSum = 0;
+  orderSampleCount = 0;
 
   while (emitted < hardCap) {
-    scanCorpus(effOrder());
+    indexModel(activeOrder());
 
     uint8_t hi = 0;
 
-    for (uint8_t k = g_maxOrder; k >= 1; k--) {
-      if (g_cand[k].count) {
+    for (uint8_t k = cfgOrder; k >= 1; k--) {
+      if (candidateTable[k].count) {
         hi = k;
         break;
       }
     }
 
     const uint8_t temp =
-      g_creative
-        ? g_temp
-        : (g_temp > 8 ? 8 : g_temp);
+      creativeMode
+        ? cfgTemp
+        : (cfgTemp > 8 ? 8 : cfgTemp);
 
     const uint8_t floorOrder =
-      g_creative
+      creativeMode
         ? ((temp <= 30) ? 4 :
            ((temp <= 65) ? 3 : 2))
-        : MAX_ORDER;
+        : NGRAM_DEPTH;
 
     while (
       hi > floorOrder &&
-      rndBelow(100) < temp
+      randomBelow(100) < temp
     )
       hi--;
 
-    if (g_creative && copyRun >= 3) {
+    if (creativeMode && copyRun >= 3) {
       uint8_t f =
         (floorOrder > 2)
           ? (uint8_t)(floorOrder - 1)
@@ -988,31 +988,31 @@ static uint16_t generate(
     }
 
     if (
-      g_histN >= 6 &&
-      g_hist[0] == g_hist[3] &&
-      g_hist[1] == g_hist[4] &&
-      g_hist[2] == g_hist[5]
+      recentCount >= 6 &&
+      recentTokens[0] == recentTokens[3] &&
+      recentTokens[1] == recentTokens[4] &&
+      recentTokens[2] == recentTokens[5]
     )
       hi = 2;
 
     bool mustEnd =
-      sentWords >= MAX_SENT_WORDS;
+      sentWords >= SENT_MAX;
 
-    Cand chosen;
+    CandidateSlot chosen;
     chosen.count = 0;
 
     uint8_t usedOrder = 0;
 
     for (uint8_t k = hi; k >= 1; k--) {
       if (
-        g_cand[k].count &&
-        candOK(
-          g_cand[k],
+        candidateTable[k].count &&
+        candidateAllowed(
+          candidateTable[k],
           sentWords,
           mustEnd
         )
       ) {
-        chosen = g_cand[k];
+        chosen = candidateTable[k];
         usedOrder = k;
         break;
       }
@@ -1020,11 +1020,11 @@ static uint16_t generate(
 
     if (!chosen.count && mustEnd) {
       Serial.print('.');
-      g_needCap = true;
-      g_started = true;
-      g_lastPunct = '.';
+      capitalizeNext = true;
+      outputStarted = true;
+      lastPunctuation = '.';
 
-      histPush(PUNCT_HASH('.'));
+      rememberToken(PX_MARK('.'));
 
       emitted++;
       sentences++;
@@ -1036,7 +1036,7 @@ static uint16_t generate(
       ) {
         Serial.println();
         Serial.println();
-        g_started = false;
+        outputStarted = false;
       }
 
       if (emitted >= budget)
@@ -1047,8 +1047,8 @@ static uint16_t generate(
 
     if (!chosen.count) {
       for (uint8_t k = hi; k >= 1; k--) {
-        if (g_cand[k].count) {
-          chosen = g_cand[k];
+        if (candidateTable[k].count) {
+          chosen = candidateTable[k];
           usedOrder = k;
           break;
         }
@@ -1056,13 +1056,13 @@ static uint16_t generate(
     }
 
     if (!chosen.count) {
-      if (!g_startCand.count)
+      if (!sentenceStart.count)
         break;
 
-      chosen = g_startCand;
+      chosen = sentenceStart;
       usedOrder = 0;
 
-      ctxSentenceStart();
+      resetAtSentence();
     }
 
     copyRun =
@@ -1070,43 +1070,43 @@ static uint16_t generate(
         ? (uint8_t)(copyRun + 1)
         : 0;
 
-    g_lastOrderSum += usedOrder;
-    g_lastOrderN++;
+    orderScoreSum += usedOrder;
+    orderSampleCount++;
 
-    whash_t h = candHash(chosen);
+    token_hash_t h = candidateTokenHash(chosen);
 
-    emit(
+    writeToken(
       chosen.start,
       chosen.len,
       chosen.type,
       h
     );
 
-    ctxPush(h);
-    histPush(h);
+    pushContext(h);
+    rememberToken(h);
 
-    g_lastPunct =
+    lastPunctuation =
       (chosen.type == 2)
-        ? corpusByte(chosen.start)
+        ? modelByte(chosen.start)
         : 0;
 
     if (chosen.type == 1)
-      posPush(chosen.start);
+      rememberPosition(chosen.start);
 
     emitted++;
 
     if (chosen.type == 1) {
       sentWords++;
 
-      if (isStrongTopicWord(h))
+      if (strongTopic(h))
         sentHadTopic = true;
     } else if (
-      isTerminal(corpusByte(chosen.start))
+      terminalChar(modelByte(chosen.start))
     ) {
       sentences++;
       sentWords = 0;
 
-      if (g_singleSentence)
+      if (oneSentenceMode)
         break;
 
       if (emitted >= budget)
@@ -1118,7 +1118,7 @@ static uint16_t generate(
       ) {
         Serial.println();
         Serial.println();
-        g_started = false;
+        outputStarted = false;
       }
 
       bool drifted =
@@ -1128,19 +1128,19 @@ static uint16_t generate(
 
       if (
         reanchorPct &&
-        g_topicCtxN &&
+        topicContextDepth &&
         !justAnchored &&
         (
           drifted ||
-          rndBelow(100) < reanchorPct
+          randomBelow(100) < reanchorPct
         )
       ) {
-        uint32_t sig = KEY_SEED;
+        uint32_t sig = HASH_ORIGIN;
 
-        for (uint8_t j = 0; j < g_topicCtxN; j++)
-          sig = mixKey(
+        for (uint8_t j = 0; j < topicContextDepth; j++)
+          sig = combineHash(
             sig,
-            g_topicCtx[j]
+            topicContext[j]
           );
 
         bool seen = false;
@@ -1155,10 +1155,10 @@ static uint16_t generate(
 
           usedAnchor[0] = sig;
 
-          for (uint8_t j = 0; j < MAX_ORDER; j++)
-            g_ctx[j] = g_topicCtx[j];
+          for (uint8_t j = 0; j < NGRAM_DEPTH; j++)
+            contextStack[j] = topicContext[j];
 
-          g_ctxN = g_topicCtxN;
+          contextDepth = topicContextDepth;
           copyRun = 0;
           justAnchored = true;
         } else {
@@ -1173,83 +1173,83 @@ static uint16_t generate(
   return emitted;
 }
 
-static whash_t g_promptHash[MAX_PROMPT_TOK];
-static uint8_t g_promptN = 0;
+static token_hash_t promptTokens[QUERY_CAP];
+static uint8_t promptTokenCount = 0;
 
-static uint8_t loadPrompt(
+static uint8_t tokenizePrompt(
   const char *s,
   bool pushCtx
 ) {
-  g_promptN = 0;
-  g_topicWordN = 0;
-  g_topicCtxN = 0;
+  promptTokenCount = 0;
+  topicKeyCount = 0;
+  topicContextDepth = 0;
 
   if (pushCtx)
-    ctxReset();
+    clearContext();
 
   uint8_t count = 0;
 
   const char *p = s;
 
   while (*p) {
-    if (isWordChar((uint8_t)*p)) {
+    if (wordChar((uint8_t)*p)) {
       const char *w = p;
 
       while (
         *p &&
-        isWordChar((uint8_t)*p)
+        wordChar((uint8_t)*p)
       )
         p++;
 
       uint16_t wl =
         (uint16_t)(p - w);
 
-      whash_t h =
-        hashRamWord(w, wl);
+      token_hash_t h =
+        hashInputWord(w, wl);
 
       if (pushCtx)
-        ctxPush(h);
+        pushContext(h);
 
-      if (g_promptN < MAX_PROMPT_TOK)
-        g_promptHash[g_promptN++] = h;
+      if (promptTokenCount < QUERY_CAP)
+        promptTokens[promptTokenCount++] = h;
 
       if (
         wl >= 3 &&
-        g_topicWordN < MAX_TOPIC &&
-        !inWordList(STOPWORDS, h) &&
-        !inWordList(META_WORDS, h)
+        topicKeyCount < TOPIC_CAP &&
+        !wordListContains(STOPWORDS, h) &&
+        !wordListContains(META_WORDS, h)
       )
-        g_topicWord[g_topicWordN++] = h;
+        topicKeys[topicKeyCount++] = h;
 
       if (
         wl >= 4 &&
         (w[wl - 1] == 's' ||
          w[wl - 1] == 'S')
       ) {
-        whash_t sh =
-          hashRamWord(
+        token_hash_t sh =
+          hashInputWord(
             w,
             wl - 1
           );
 
-        if (g_promptN < MAX_PROMPT_TOK)
-          g_promptHash[g_promptN++] = sh;
+        if (promptTokenCount < QUERY_CAP)
+          promptTokens[promptTokenCount++] = sh;
 
         if (
-          g_topicWordN < MAX_TOPIC &&
-          !inWordList(STOPWORDS, sh) &&
-          !inWordList(META_WORDS, sh)
+          topicKeyCount < TOPIC_CAP &&
+          !wordListContains(STOPWORDS, sh) &&
+          !wordListContains(META_WORDS, sh)
         )
-          g_topicWord[g_topicWordN++] = sh;
+          topicKeys[topicKeyCount++] = sh;
       }
 
       count++;
     } else if (
-      isPunctChar((uint8_t)*p)
+      punctChar((uint8_t)*p)
     ) {
       if (pushCtx)
-        ctxPush(
-          PUNCT_HASH(
+        pushContext(
+          PX_MARK(
             (uint8_t)*p
           )
         );
@@ -1264,15 +1264,15 @@ static uint8_t loadPrompt(
   return count;
 }
 
-static bool promptHas(whash_t h) {
-  for (uint8_t i = 0; i < g_promptN; i++)
-    if (g_promptHash[i] == h)
+static bool promptContains(token_hash_t h) {
+  for (uint8_t i = 0; i < promptTokenCount; i++)
+    if (promptTokens[i] == h)
       return true;
 
   return false;
 }
 
-static whash_t firstWordHash(
+static token_hash_t firstPromptHash(
   const char *p,
   uint16_t &lenOut
 ) {
@@ -1283,18 +1283,18 @@ static whash_t firstWordHash(
 
   while (
     p[n] &&
-    isWordChar((uint8_t)p[n])
+    wordChar((uint8_t)p[n])
   )
     n++;
 
   lenOut = n;
 
   return n
-    ? hashRamWord(p, n)
+    ? hashInputWord(p, n)
     : 0;
 }
 
-static bool isConversationPrompt(const char *s) {
+static bool socialPrompt(const char *s) {
   static const char WORDS[] PROGMEM =
     "hi hello hey yo sup howdy yeah yes yep yup nah no "
     "okay ok sure alright thanks thank please cool great nice awesome "
@@ -1310,7 +1310,7 @@ static bool isConversationPrompt(const char *s) {
   const char *p = s;
 
   while (*p) {
-    while (*p && !isWordChar((uint8_t)*p))
+    while (*p && !wordChar((uint8_t)*p))
       p++;
 
     if (!*p)
@@ -1318,7 +1318,7 @@ static bool isConversationPrompt(const char *s) {
 
     const char *w = p;
 
-    while (*p && isWordChar((uint8_t)*p))
+    while (*p && wordChar((uint8_t)*p))
       p++;
 
     uint16_t len = (uint16_t)(p - w);
@@ -1326,18 +1326,18 @@ static bool isConversationPrompt(const char *s) {
     if (!len)
       continue;
 
-    whash_t h = hashRamWord(w, len);
+    token_hash_t h = hashInputWord(w, len);
 
     words++;
 
-    if (inWordList(WORDS, h))
+    if (wordListContains(WORDS, h))
       conversational++;
 
     if (
       len >= 3 &&
-      !inWordList(STOPWORDS, h) &&
-      !inWordList(META_WORDS, h) &&
-      !inWordList(WORDS, h)
+      !wordListContains(STOPWORDS, h) &&
+      !wordListContains(META_WORDS, h) &&
+      !wordListContains(WORDS, h)
     )
       topic++;
   }
@@ -1351,7 +1351,7 @@ static bool isConversationPrompt(const char *s) {
   return false;
 }
 
-static uint8_t detectMode(
+static uint8_t classifyInput(
   const char **text
 ) {
   const char *p = *text;
@@ -1361,44 +1361,44 @@ static uint8_t detectMode(
 
   uint16_t n = 0;
 
-  whash_t h =
-    firstWordHash(p, n);
+  token_hash_t h =
+    firstPromptHash(p, n);
 
   if (!n)
     return 0;
 
-  if (isConversationPrompt(p))
+  if (socialPrompt(p))
     return 0;
 
-  if (inWordList(ASK_WORDS, h))
+  if (wordListContains(ASK_WORDS, h))
     return 1;
 
-  if (!inWordList(CMD_VERBS, h))
+  if (!wordListContains(CMD_VERBS, h))
     return 0;
 
-  const whash_t s1 =
-    hashRamWord("story", 5);
+  const token_hash_t s1 =
+    hashInputWord("story", 5);
 
-  const whash_t s2 =
-    hashRamWord("stories", 7);
+  const token_hash_t s2 =
+    hashInputWord("stories", 7);
 
-  const whash_t s3 =
-    hashRamWord("tale", 4);
+  const token_hash_t s3 =
+    hashInputWord("tale", 4);
 
   bool wantsStory = false;
 
   for (const char *r = p; *r;) {
-    if (isWordChar((uint8_t)*r)) {
+    if (wordChar((uint8_t)*r)) {
       const char *w = r;
 
       while (
         *r &&
-        isWordChar((uint8_t)*r)
+        wordChar((uint8_t)*r)
       )
         r++;
 
-      whash_t wh =
-        hashRamWord(
+      token_hash_t wh =
+        hashInputWord(
           w,
           (uint16_t)(r - w)
         );
@@ -1422,7 +1422,7 @@ static uint8_t detectMode(
 
     while (
       p[m] &&
-      isWordChar((uint8_t)p[m])
+      wordChar((uint8_t)p[m])
     )
       m++;
 
@@ -1430,9 +1430,9 @@ static uint8_t detectMode(
       break;
 
     if (
-      !inWordList(
+      !wordListContains(
         META_WORDS,
-        hashRamWord(p, m)
+        hashInputWord(p, m)
       )
     )
       break;
@@ -1452,38 +1452,38 @@ static uint8_t detectMode(
   return wantsStory ? 2 : 1;
 }
 
-static void printTopicWords(
+static void showTopics(
   const char *prompt
 ) {
   bool any = false;
 
   for (const char *r = prompt; *r;) {
-    if (isWordChar((uint8_t)*r)) {
+    if (wordChar((uint8_t)*r)) {
       const char *w = r;
 
       while (
         *r &&
-        isWordChar((uint8_t)*r)
+        wordChar((uint8_t)*r)
       )
         r++;
 
       uint16_t l =
         (uint16_t)(r - w);
 
-      whash_t h =
-        hashRamWord(w, l);
+      token_hash_t h =
+        hashInputWord(w, l);
 
       if (
         l >= 3 &&
-        !inWordList(STOPWORDS, h) &&
-        !inWordList(META_WORDS, h)
+        !wordListContains(STOPWORDS, h) &&
+        !wordListContains(META_WORDS, h)
       ) {
         if (any)
           Serial.print(F(", "));
 
         for (uint16_t i = 0; i < l; i++)
           Serial.print(
-            (char)lc((uint8_t)w[i])
+            (char)lowerAscii((uint8_t)w[i])
           );
 
         any = true;
@@ -1497,10 +1497,10 @@ static void printTopicWords(
     Serial.print(F("(none)"));
 }
 
-#define FACT_MIN_SCORE 3
-#define FACT_MIN_MARGIN 1
+#define FACT_SCORE_MIN 3
+#define FACT_MARGIN_MIN 1
 
-static bool findFact(
+static bool lookupFact(
   uint16_t &ansStart,
   uint16_t &ansLen,
   uint8_t &bestScore,
@@ -1552,18 +1552,18 @@ static bool findFact(
                 )
               : ' ';
 
-          if (isWordChar(c)) {
-            h ^= lc(c);
+          if (wordChar(c)) {
+            h ^= lowerAscii(c);
             h *= 16777619UL;
             n++;
           } else {
             if (n >= 2) {
-              whash_t wh =
-                foldHash(h);
+              token_hash_t wh =
+                normalizeHash(h);
 
               if (
-                promptHas(wh) &&
-                !inWordList(
+                promptContains(wh) &&
+                !wordListContains(
                   STOPWORDS,
                   wh
                 )
@@ -1583,7 +1583,7 @@ static bool findFact(
         }
 
         if (
-          score >= FACT_MIN_SCORE &&
+          score >= FACT_SCORE_MIN &&
           (
             score > bestScore ||
             (
@@ -1637,10 +1637,10 @@ static bool findFact(
   }
 
   return any &&
-         bestScore >= FACT_MIN_SCORE;
+         bestScore >= FACT_SCORE_MIN;
 }
 
-static void printFact(
+static void showFact(
   uint16_t s,
   uint16_t n
 ) {
@@ -1652,13 +1652,13 @@ static void printFact(
     );
 }
 
-#define MAX_LABELS 64
+#define LABEL_CAP 64
 
-static void classify() {
-  whash_t labelHash[MAX_LABELS];
-  uint32_t labelStart[MAX_LABELS];
-  uint16_t labelLen[MAX_LABELS];
-  uint16_t score[MAX_LABELS];
+static void runClassifier() {
+  token_hash_t labelHash[LABEL_CAP];
+  uint32_t labelStart[LABEL_CAP];
+  uint16_t labelLen[LABEL_CAP];
+  uint16_t score[LABEL_CAP];
 
   uint8_t nl = 0;
 
@@ -1707,7 +1707,7 @@ static void classify() {
         j < le;
         j++
       ) {
-        h ^= lc(
+        h ^= lowerAscii(
           pgm_read_byte(
             &TRAIN_EXAMPLES[j]
           )
@@ -1716,7 +1716,7 @@ static void classify() {
         h *= 16777619UL;
       }
 
-      whash_t lh = foldHash(h);
+      token_hash_t lh = normalizeHash(h);
 
       int16_t idx = -1;
 
@@ -1727,7 +1727,7 @@ static void classify() {
         }
       }
 
-      if (idx < 0 && nl < MAX_LABELS) {
+      if (idx < 0 && nl < LABEL_CAP) {
         idx = nl;
 
         labelHash[nl] = lh;
@@ -1756,18 +1756,18 @@ static void classify() {
                 )
               : ' ';
 
-          if (isWordChar(c)) {
-            wh ^= lc(c);
+          if (wordChar(c)) {
+            wh ^= lowerAscii(c);
             wh *= 16777619UL;
             n++;
           } else {
             if (n >= 3) {
-              whash_t f =
-                foldHash(wh);
+              token_hash_t f =
+                normalizeHash(wh);
 
               if (
-                promptHas(f) &&
-                !inWordList(
+                promptContains(f) &&
+                !wordListContains(
                   STOPWORDS,
                   f
                 )
@@ -1845,70 +1845,70 @@ static void classify() {
   Serial.println(F(")"));
 }
 
-static const char *g_cp;
+static const char *calcCursor;
 
-static double parseExpr();
+static double expression();
 
-static void skipSp() {
-  while (*g_cp == ' ')
-    g_cp++;
+static void skipSpaces() {
+  while (*calcCursor == ' ')
+    calcCursor++;
 }
 
-static double parseAtom() {
-  skipSp();
+static double atom() {
+  skipSpaces();
 
-  if (*g_cp == '(') {
-    g_cp++;
+  if (*calcCursor == '(') {
+    calcCursor++;
 
-    double v = parseExpr();
+    double v = expression();
 
-    skipSp();
+    skipSpaces();
 
-    if (*g_cp == ')')
-      g_cp++;
+    if (*calcCursor == ')')
+      calcCursor++;
 
     return v;
   }
 
-  if (*g_cp == '-') {
-    g_cp++;
-    return -parseAtom();
+  if (*calcCursor == '-') {
+    calcCursor++;
+    return -atom();
   }
 
-  if (*g_cp == '+') {
-    g_cp++;
-    return parseAtom();
+  if (*calcCursor == '+') {
+    calcCursor++;
+    return atom();
   }
 
   double v = 0;
   bool any = false;
 
   while (
-    *g_cp >= '0' &&
-    *g_cp <= '9'
+    *calcCursor >= '0' &&
+    *calcCursor <= '9'
   ) {
     v =
       v * 10 +
-      (*g_cp - '0');
+      (*calcCursor - '0');
 
-    g_cp++;
+    calcCursor++;
     any = true;
   }
 
-  if (*g_cp == '.') {
-    g_cp++;
+  if (*calcCursor == '.') {
+    calcCursor++;
 
     double f = 0.1;
 
     while (
-      *g_cp >= '0' &&
-      *g_cp <= '9'
+      *calcCursor >= '0' &&
+      *calcCursor <= '9'
     ) {
       v +=
-        (*g_cp - '0') * f;
+        (*calcCursor - '0') * f;
 
       f *= 0.1;
-      g_cp++;
+      calcCursor++;
       any = true;
     }
   }
@@ -1919,15 +1919,15 @@ static double parseAtom() {
   return v;
 }
 
-static double parsePow() {
-  double b = parseAtom();
+static double power() {
+  double b = atom();
 
-  skipSp();
+  skipSpaces();
 
-  if (*g_cp == '^') {
-    g_cp++;
+  if (*calcCursor == '^') {
+    calcCursor++;
 
-    double e = parsePow();
+    double e = power();
 
     double r = 1;
 
@@ -1949,26 +1949,26 @@ static double parsePow() {
   return b;
 }
 
-static double parseTerm() {
-  double v = parsePow();
+static double term() {
+  double v = power();
 
   for (;;) {
-    skipSp();
+    skipSpaces();
 
-    if (*g_cp == '*') {
-      g_cp++;
-      v *= parsePow();
-    } else if (*g_cp == '/') {
-      g_cp++;
+    if (*calcCursor == '*') {
+      calcCursor++;
+      v *= power();
+    } else if (*calcCursor == '/') {
+      calcCursor++;
 
-      double d = parsePow();
+      double d = power();
 
       v = d ? v / d : 0;
-    } else if (*g_cp == '%') {
-      g_cp++;
+    } else if (*calcCursor == '%') {
+      calcCursor++;
 
       long d =
-        (long)parsePow();
+        (long)power();
 
       v =
         d
@@ -1980,25 +1980,25 @@ static double parseTerm() {
   }
 }
 
-static double parseExpr() {
-  double v = parseTerm();
+static double expression() {
+  double v = term();
 
   for (;;) {
-    skipSp();
+    skipSpaces();
 
-    if (*g_cp == '+') {
-      g_cp++;
-      v += parseTerm();
-    } else if (*g_cp == '-') {
-      g_cp++;
-      v -= parseTerm();
+    if (*calcCursor == '+') {
+      calcCursor++;
+      v += term();
+    } else if (*calcCursor == '-') {
+      calcCursor++;
+      v -= term();
     } else {
       return v;
     }
   }
 }
 
-static void lexScan(
+static void scanLexeme(
   const char *pat,
   uint8_t mode
 ) {
@@ -2017,9 +2017,9 @@ static void lexScan(
         &TRAIN_WORDS[i]
       );
 
-    if (isWordChar(c)) {
+    if (wordChar(c)) {
       if (n < sizeof(w) - 1)
-        w[n++] = (char)lc(c);
+        w[n++] = (char)lowerAscii(c);
     } else if (n) {
       w[n] = 0;
 
@@ -2074,7 +2074,7 @@ static void lexScan(
   Serial.println((int)hits);
 }
 
-static uint16_t lexCount() {
+static uint16_t countLexemes() {
   uint32_t i = 0;
   uint16_t n = 0;
 
@@ -2086,7 +2086,7 @@ static uint16_t lexCount() {
         &TRAIN_WORDS[i]
       );
 
-    if (isWordChar(c)) {
+    if (wordChar(c)) {
       if (!in) {
         n++;
         in = true;
@@ -2104,21 +2104,21 @@ static uint16_t lexCount() {
   return n;
 }
 
-static int freeRam() {
+static int measureFreeMemory() {
   return (int)ESP.getFreeHeap();
 }
 
-static void thinkLine(
+static void traceLine(
   const char *label
 ) {
-  if (!g_showThink)
+  if (!cfgTrace)
     return;
 
   Serial.print(F("[debug] "));
   Serial.print(label);
 }
 
-static void banner() {
+static void printBanner() {
   Serial.println();
 
   Serial.println(
@@ -2134,29 +2134,29 @@ static void banner() {
   );
 
   Serial.print(F("  corpus     : "));
-  Serial.print(corpusLen());
+  Serial.print(modelLength());
 
   Serial.print(F(" bytes ("));
-  Serial.print(g_flashLen);
+  Serial.print(flashBytes);
 
   Serial.print(F(" flash + "));
-  Serial.print(g_eepLen);
+  Serial.print(storedBytes);
 
   Serial.println(F(" learned)"));
 
   Serial.print(F("  sections   : "));
-  listSegments();
+  showSections();
   Serial.println();
 
   Serial.print(F("  lexicon    : "));
-  Serial.print(lexCount());
+  Serial.print(countLexemes());
   Serial.println(F(" words"));
 
   Serial.print(F("  max order  : "));
-  Serial.println((int)g_maxOrder);
+  Serial.println((int)cfgOrder);
 
   Serial.print(F("  free heap  : "));
-  Serial.print(freeRam());
+  Serial.print(measureFreeMemory());
   Serial.println(F(" bytes"));
 
   Serial.println(
@@ -2166,7 +2166,7 @@ static void banner() {
   Serial.println();
 }
 
-static void report(
+static void printReport(
   uint32_t ms,
   uint16_t promptTok,
   uint16_t outTok
@@ -2209,25 +2209,25 @@ static void report(
     Serial.print(F(" tok/s"));
   }
 
-  if (g_lastOrderN) {
+  if (orderSampleCount) {
     Serial.print(F("  |  avg order "));
 
     Serial.print(
-      (double)g_lastOrderSum /
-      (double)g_lastOrderN,
+      (double)orderScoreSum /
+      (double)orderSampleCount,
       2
     );
   }
 
   Serial.print(F("  |  section "));
 
-  if (g_lastSeg < g_segN)
-    printSegName(g_lastSeg);
+  if (previousSection < sectionCount)
+    showSectionName(previousSection);
   else
     Serial.print(F("all"));
 
   Serial.print(F("  |  free heap "));
-  Serial.print(freeRam());
+  Serial.print(measureFreeMemory());
 
   Serial.println();
 
@@ -2238,14 +2238,14 @@ static void report(
   Serial.println();
 }
 
-static bool answerQuestionFromFact(
+static bool answerFromFact(
   const char *prompt,
   uint16_t &fs,
   uint16_t &fl,
   uint8_t &fscore
 ) {
   bool haveFact =
-    findFact(
+    lookupFact(
       fs,
       fl,
       fscore,
@@ -2255,37 +2255,37 @@ static bool answerQuestionFromFact(
   if (!haveFact)
     return false;
 
-  if (fscore < FACT_MIN_SCORE)
+  if (fscore < FACT_SCORE_MIN)
     return false;
 
   return true;
 }
 
-static void runInference(
+static void processInput(
   const char *prompt,
   uint8_t mode,
   uint16_t budget
 ) {
   uint32_t t0 = millis();
 
-  g_needCap = true;
-  g_started = false;
-  g_histN = 0;
-  g_posN = 0;
+  capitalizeNext = true;
+  outputStarted = false;
+  recentCount = 0;
+  recentPositionCount = 0;
 
   uint16_t ptok =
-    loadPrompt(
+    tokenizePrompt(
       prompt,
       true
     );
 
-  if (g_showThink) {
-    thinkLine("tokenize     -> ");
+  if (cfgTrace) {
+    traceLine("tokenize     -> ");
     Serial.print(ptok);
 
     Serial.print(F(" tokens, "));
     Serial.print(
-      (int)g_topicWordN
+      (int)topicKeyCount
     );
 
     Serial.println(
@@ -2293,54 +2293,49 @@ static void runInference(
     );
   }
 
-  setScan(255);
+  selectScan(255);
 
   uint16_t hits = 0;
   uint8_t seg = 255;
 
   if (
-    g_segN &&
-    g_topicWordN
+    sectionCount &&
+    topicKeyCount
   )
-    hits = scoreSegments();
+    hits = measureSections();
 
-  if (g_forceSeg != 255) {
-    seg = g_forceSeg;
+  if (forcedSection != 255) {
+    seg = forcedSection;
   } else if (
-    g_segN &&
-    g_topicWordN &&
+    sectionCount &&
+    topicKeyCount &&
     hits
   ) {
     if (
       mode == 2 &&
-      g_storySeg != 255 &&
-      g_segHits[g_storySeg]
+      storySection != 255 &&
+      sectionHits[storySection]
     )
-      seg = g_storySeg;
+      seg = storySection;
     else
       seg =
-        bestSegment(
+        chooseSection(
           mode == 1
         );
   } else if (
     mode == 2 &&
-    g_storySeg != 255
+    storySection != 255
   ) {
-    seg = g_storySeg;
+    seg = storySection;
   }
 
-  setScan(seg);
+  selectScan(seg);
 
-  g_lastSeg = seg;
+  previousSection = seg;
 
-  g_creative =
-    (g_storySeg != 255) &&
-    (seg == g_storySeg);
-
-  /*
-    Answer mode is now strictly factual.
-    It never falls through to free n-gram generation.
-  */
+  creativeMode =
+    (storySection != 255) &&
+    (seg == storySection);
 
   uint16_t fs = 0;
   uint16_t fl = 0;
@@ -2350,22 +2345,22 @@ static void runInference(
 
   if (mode == 1) {
     haveFact =
-      answerQuestionFromFact(
+      answerFromFact(
         prompt,
         fs,
         fl,
         fscore
       );
 
-    if (g_showThink) {
-      thinkLine("route        -> ");
+    if (cfgTrace) {
+      traceLine("route        -> ");
 
-      if (seg < g_segN) {
+      if (seg < sectionCount) {
         Serial.print(F("section "));
-        printSegName(seg);
+        showSectionName(seg);
         Serial.print(F(", "));
         Serial.print(
-          g_segHits[seg]
+          sectionHits[seg]
         );
         Serial.print(
           F(" topic hits")
@@ -2380,7 +2375,7 @@ static void runInference(
         F(", factual mode")
       );
 
-      thinkLine("retrieve     -> ");
+      traceLine("retrieve     -> ");
 
       if (haveFact) {
         Serial.print(
@@ -2403,14 +2398,14 @@ static void runInference(
     );
 
     if (haveFact) {
-      printFact(fs, fl);
+      showFact(fs, fl);
       Serial.println();
 
       Serial.println(
         F("================")
       );
 
-      report(
+      printReport(
         millis() - t0,
         ptok,
         0
@@ -2427,7 +2422,7 @@ static void runInference(
       F("Known topic terms: ")
     );
 
-    printTopicWords(prompt);
+    showTopics(prompt);
 
     Serial.println();
 
@@ -2439,7 +2434,7 @@ static void runInference(
       F("================")
     );
 
-    report(
+    printReport(
       millis() - t0,
       ptok,
       0
@@ -2450,8 +2445,8 @@ static void runInference(
 
   if (
     mode != 2 &&
-    g_segN &&
-    g_topicWordN &&
+    sectionCount &&
+    topicKeyCount &&
     hits == 0
   ) {
     Serial.println();
@@ -2464,7 +2459,7 @@ static void runInference(
       F("not in the corpus : ")
     );
 
-    printTopicWords(prompt);
+    showTopics(prompt);
 
     Serial.println();
 
@@ -2472,7 +2467,7 @@ static void runInference(
       F("sections available: ")
     );
 
-    listSegments();
+    showSections();
 
     Serial.println();
 
@@ -2484,7 +2479,7 @@ static void runInference(
       F("=========================")
     );
 
-    report(
+    printReport(
       millis() - t0,
       ptok,
       0
@@ -2493,23 +2488,23 @@ static void runInference(
     return;
   }
 
-  scanCorpus(effOrder());
+  indexModel(activeOrder());
 
   uint8_t grounded = 0;
 
   for (
-    uint8_t k = effOrder();
+    uint8_t k = activeOrder();
     k >= 1;
     k--
   ) {
-    if (g_cand[k].count) {
+    if (candidateTable[k].count) {
       grounded = k;
       break;
     }
   }
 
-  if (g_showThink) {
-    thinkLine(
+  if (cfgTrace) {
+    traceLine(
       "probe        -> longest matched context: order "
     );
 
@@ -2519,7 +2514,7 @@ static void runInference(
 
     Serial.print(
       grounded
-        ? g_cand[grounded].count
+        ? candidateTable[grounded].count
         : 0
     );
 
@@ -2528,7 +2523,7 @@ static void runInference(
     );
 
     Serial.print(
-      (unsigned long)g_corpusTokens
+      (unsigned long)tokenTotal
     );
 
     Serial.println(
@@ -2536,8 +2531,8 @@ static void runInference(
     );
   }
 
-  if (g_showThink) {
-    thinkLine("plan         -> mode=");
+  if (cfgTrace) {
+    traceLine("plan         -> mode=");
 
     Serial.print(
       mode == 0
@@ -2549,11 +2544,11 @@ static void runInference(
     Serial.print(budget);
 
     Serial.print(F(" temp="));
-    Serial.print((int)g_temp);
+    Serial.print((int)cfgTemp);
 
     Serial.print(F(" order<="));
     Serial.println(
-      (int)effOrder()
+      (int)activeOrder()
     );
 
     Serial.println(
@@ -2572,37 +2567,37 @@ static void runInference(
   if (mode == 0) {
     Serial.print(prompt);
 
-    g_started = true;
-    g_needCap = false;
+    outputStarted = true;
+    capitalizeNext = false;
 
-    g_singleSentence = true;
+    oneSentenceMode = true;
 
     outTok =
-      generate(
+      synthesize(
         budget,
         0,
         40
       );
 
-    g_singleSentence = false;
+    oneSentenceMode = false;
   } else {
-    scanCorpus(effOrder());
+    indexModel(activeOrder());
 
-    if (g_topicCtxN) {
-      for (uint8_t j = 0; j < MAX_ORDER; j++)
-        g_ctx[j] =
-          g_topicCtx[j];
+    if (topicContextDepth) {
+      for (uint8_t j = 0; j < NGRAM_DEPTH; j++)
+        contextStack[j] =
+          topicContext[j];
 
-      g_ctxN = g_topicCtxN;
+      contextDepth = topicContextDepth;
     } else {
-      ctxSentenceStart();
+      resetAtSentence();
     }
 
-    g_started = false;
-    g_needCap = true;
+    outputStarted = false;
+    capitalizeNext = true;
 
     outTok =
-      generate(
+      synthesize(
         budget,
         mode == 2 ? 3 : 0,
         mode == 2 ? 60 : 45
@@ -2615,14 +2610,14 @@ static void runInference(
     F("================")
   );
 
-  report(
+  printReport(
     millis() - t0,
     ptok,
     outTok
   );
 }
 
-static void help() {
+static void printHelp() {
   Serial.println(
     F("Espie commands")
   );
@@ -2706,11 +2701,11 @@ static void help() {
   Serial.println();
 }
 
-static void doLearn(
+static void storeLearning(
   const char *txt
 ) {
   uint16_t room =
-    EEP_SIZE - EEP_HDR;
+    STORE_CAP - STORE_HEAD;
 
   uint16_t n =
     (uint16_t)strlen(txt);
@@ -2723,11 +2718,11 @@ static void doLearn(
       ? (uint8_t)txt[n - 1]
       : 0;
 
-  if (!isTerminal(last))
+  if (!terminalChar(last))
     add++;
 
   if (
-    (uint32_t)g_eepLen +
+    (uint32_t)storedBytes +
     add >
     room
   ) {
@@ -2739,50 +2734,50 @@ static void doLearn(
   }
 
   uint16_t w =
-    EEP_HDR + g_eepLen;
+    STORE_HEAD + storedBytes;
 
-  eepWrite(w++, ' ');
+  storageWrite(w++, ' ');
 
   for (uint16_t i = 0; i < n; i++)
-    eepWrite(
+    storageWrite(
       w++,
       (uint8_t)txt[i]
     );
 
-  if (!isTerminal(last))
-    eepWrite(w++, '.');
+  if (!terminalChar(last))
+    storageWrite(w++, '.');
 
-  eepSetLen(
-    g_eepLen + add
+  storageSetLength(
+    storedBytes + add
   );
 
-  buildSegments();
+  discoverSections();
 
   Serial.print(
     F("learned as unverified prose. corpus is now ")
   );
 
   Serial.print(
-    corpusLen()
+    modelLength()
   );
 
   Serial.print(F(" bytes ("));
 
-  Serial.print(g_eepLen);
+  Serial.print(storedBytes);
 
   Serial.println(
     F(" learned bytes)")
   );
 }
 
-static void stats() {
+static void printStats() {
   uint32_t t0 = millis();
 
-  setScan(255);
-  ctxReset();
-  g_topicWordN = 0;
+  selectScan(255);
+  clearContext();
+  topicKeyCount = 0;
 
-  scanCorpus(1);
+  indexModel(1);
 
   uint32_t dt =
     millis() - t0;
@@ -2792,7 +2787,7 @@ static void stats() {
   );
 
   Serial.println(
-    corpusLen()
+    modelLength()
   );
 
   Serial.print(
@@ -2800,7 +2795,7 @@ static void stats() {
   );
 
   Serial.println(
-    g_flashLen
+    flashBytes
   );
 
   Serial.print(
@@ -2808,7 +2803,7 @@ static void stats() {
   );
 
   Serial.println(
-    g_eepLen
+    storedBytes
   );
 
   Serial.print(
@@ -2816,7 +2811,7 @@ static void stats() {
   );
 
   Serial.println(
-    (unsigned long)g_corpusTokens
+    (unsigned long)tokenTotal
   );
 
   Serial.print(
@@ -2824,7 +2819,7 @@ static void stats() {
   );
 
   Serial.println(
-    lexCount()
+    countLexemes()
   );
 
   Serial.print(
@@ -2832,14 +2827,14 @@ static void stats() {
   );
 
   Serial.println(
-    g_startCand.count
+    sentenceStart.count
   );
 
   Serial.print(
     F("sections        : ")
   );
 
-  listSegments();
+  showSections();
 
   Serial.println();
 
@@ -2858,7 +2853,7 @@ static void stats() {
   );
 
   Serial.println(
-    (int)g_maxOrder
+    (int)cfgOrder
   );
 
   Serial.print(
@@ -2866,7 +2861,7 @@ static void stats() {
   );
 
   Serial.println(
-    (int)g_temp
+    (int)cfgTemp
   );
 
   Serial.print(
@@ -2874,7 +2869,7 @@ static void stats() {
   );
 
   Serial.println(
-    FACT_MIN_SCORE
+    FACT_SCORE_MIN
   );
 
   Serial.print(
@@ -2882,7 +2877,7 @@ static void stats() {
   );
 
   Serial.print(
-    freeRam()
+    measureFreeMemory()
   );
 
   Serial.println(
@@ -2892,37 +2887,37 @@ static void stats() {
   Serial.println();
 }
 
-static void bench() {
+static void runBenchmark() {
   uint32_t t0 = millis();
 
-  g_needCap = true;
-  g_started = false;
-  g_histN = 0;
-  g_posN = 0;
+  capitalizeNext = true;
+  outputStarted = false;
+  recentCount = 0;
+  recentPositionCount = 0;
 
-  setScan(255);
+  selectScan(255);
 
-  loadPrompt(
+  tokenizePrompt(
     "the cat",
     true
   );
 
-  bool s = g_showThink;
+  bool s = cfgTrace;
 
-  g_showThink = false;
+  cfgTrace = false;
 
   Serial.print(
     F("bench output: ")
   );
 
   uint16_t n =
-    generate(
+    synthesize(
       40,
       0,
       50
     );
 
-  g_showThink = s;
+  cfgTrace = s;
 
   uint32_t dt =
     millis() - t0;
@@ -2959,7 +2954,7 @@ static void bench() {
   Serial.println();
 }
 
-static bool startsWith(
+static bool hasPrefix(
   const char *s,
   const char *p
 ) {
@@ -2970,21 +2965,21 @@ static bool startsWith(
   ) == 0;
 }
 
-static bool sectionNameEquals(
+static bool sectionMatches(
   uint8_t k,
   const char *name
 ) {
-  if (k >= g_segN)
+  if (k >= sectionCount)
     return false;
 
   uint16_t n =
     (uint16_t)strlen(name);
 
-  if (n != g_seg[k].nameLen)
+  if (n != sections[k].nameLen)
     return false;
 
   if (
-    g_seg[k].nameStart ==
+    sections[k].nameStart ==
     0xFFFFFFFFUL
   )
     return strcmp(
@@ -2994,14 +2989,14 @@ static bool sectionNameEquals(
 
   for (uint16_t i = 0; i < n; i++) {
     if (
-      lc(
+      lowerAscii(
         pgm_read_byte(
           &TRAIN_TEXT[
-            g_seg[k].nameStart + i
+            sections[k].nameStart + i
           ]
         )
       ) !=
-      lc((uint8_t)name[i])
+      lowerAscii((uint8_t)name[i])
     )
       return false;
   }
@@ -3009,7 +3004,7 @@ static bool sectionNameEquals(
   return true;
 }
 
-static void handleLine(
+static void dispatchLine(
   char *line
 ) {
   while (*line == ' ')
@@ -3022,7 +3017,7 @@ static void handleLine(
     const char *body = line;
 
     uint8_t m =
-      detectMode(&body);
+      classifyInput(&body);
 
     if (
       !*body &&
@@ -3035,43 +3030,43 @@ static void handleLine(
       return;
     }
 
-    runInference(
+    processInput(
       body,
       m,
       m == 2
         ? (uint16_t)(
-            g_budget > 21845
+            cfgBudget > 21845
               ? 65535
-              : g_budget * 3
+              : cfgBudget * 3
           )
         : (
             m == 1
               ? 30
-              : g_budget
+              : cfgBudget
           )
     );
 
     return;
   }
 
-  if (startsWith(line, "/help")) {
-    help();
+  if (hasPrefix(line, "/help")) {
+    printHelp();
     return;
   }
 
-  if (startsWith(line, "/stats")) {
-    stats();
+  if (hasPrefix(line, "/stats")) {
+    printStats();
     return;
   }
 
-  if (startsWith(line, "/bench")) {
-    bench();
+  if (hasPrefix(line, "/bench")) {
+    runBenchmark();
     return;
   }
 
-  if (startsWith(line, "/forget")) {
-    eepSetLen(0);
-    buildSegments();
+  if (hasPrefix(line, "/forget")) {
+    storageSetLength(0);
+    discoverSections();
 
     Serial.println(
       F("learned data erased.")
@@ -3080,8 +3075,8 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/think")) {
-    g_showThink =
+  if (hasPrefix(line, "/think")) {
+    cfgTrace =
       (strstr(
         line,
         "off"
@@ -3092,7 +3087,7 @@ static void handleLine(
     );
 
     Serial.println(
-      g_showThink
+      cfgTrace
         ? F("on")
         : F("off")
     );
@@ -3100,23 +3095,23 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/raw ")) {
-    runInference(
+  if (hasPrefix(line, "/raw ")) {
+    processInput(
       line + 5,
       0,
-      g_budget
+      cfgBudget
     );
 
     return;
   }
 
-  if (startsWith(line, "/ask ")) {
+  if (hasPrefix(line, "/ask ")) {
     const char *b =
       line + 5;
 
-    detectMode(&b);
+    classifyInput(&b);
 
-    runInference(
+    processInput(
       b,
       1,
       30
@@ -3125,26 +3120,26 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/story ")) {
+  if (hasPrefix(line, "/story ")) {
     const char *b =
       line + 7;
 
-    detectMode(&b);
+    classifyInput(&b);
 
-    runInference(
+    processInput(
       b,
       2,
-      g_budget > 21845
+      cfgBudget > 21845
         ? 65535
         : (uint16_t)(
-            g_budget * 3
+            cfgBudget * 3
           )
     );
 
     return;
   }
 
-  if (startsWith(line, "/topic")) {
+  if (hasPrefix(line, "/topic")) {
     const char *a =
       line + 6;
 
@@ -3156,7 +3151,7 @@ static void handleLine(
         F("sections: ")
       );
 
-      listSegments();
+      showSections();
 
       Serial.println();
 
@@ -3165,11 +3160,11 @@ static void handleLine(
       );
 
       if (
-        g_forceSeg <
-        g_segN
+        forcedSection <
+        sectionCount
       )
-        printSegName(
-          g_forceSeg
+        showSectionName(
+          forcedSection
         );
       else
         Serial.print(
@@ -3186,7 +3181,7 @@ static void handleLine(
 
     while (
       a[n] &&
-      isSectionNameChar(
+      sectionChar(
         (uint8_t)a[n]
       )
     )
@@ -3209,7 +3204,7 @@ static void handleLine(
 
     for (uint16_t i = 0; i < copy; i++)
       name[i] =
-        (char)lc(
+        (char)lowerAscii(
           (uint8_t)a[i]
         );
 
@@ -3219,7 +3214,7 @@ static void handleLine(
       strcmp(name, "auto") == 0 ||
       strcmp(name, "all") == 0
     ) {
-      g_forceSeg = 255;
+      forcedSection = 255;
 
       Serial.println(
         F("topic lock off")
@@ -3230,20 +3225,20 @@ static void handleLine(
       return;
     }
 
-    for (uint8_t k = 0; k < g_segN; k++) {
+    for (uint8_t k = 0; k < sectionCount; k++) {
       if (
-        sectionNameEquals(
+        sectionMatches(
           k,
           name
         )
       ) {
-        g_forceSeg = k;
+        forcedSection = k;
 
         Serial.print(
           F("locked to ")
         );
 
-        printSegName(k);
+        showSectionName(k);
 
         Serial.println();
         Serial.println();
@@ -3256,7 +3251,7 @@ static void handleLine(
       F("no such section. have: ")
     );
 
-    listSegments();
+    showSections();
 
     Serial.println();
     Serial.println();
@@ -3264,26 +3259,26 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/learn ")) {
-    doLearn(line + 7);
+  if (hasPrefix(line, "/learn ")) {
+    storeLearning(line + 7);
     return;
   }
 
-  if (startsWith(line, "/class ")) {
-    loadPrompt(
+  if (hasPrefix(line, "/class ")) {
+    tokenizePrompt(
       line + 7,
       false
     );
 
-    classify();
+    runClassifier();
 
     Serial.println();
 
     return;
   }
 
-  if (startsWith(line, "/words ")) {
-    lexScan(
+  if (hasPrefix(line, "/words ")) {
+    scanLexeme(
       line + 7,
       0
     );
@@ -3291,8 +3286,8 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/rhyme ")) {
-    lexScan(
+  if (hasPrefix(line, "/rhyme ")) {
+    scanLexeme(
       line + 7,
       1
     );
@@ -3300,12 +3295,12 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/calc ")) {
-    g_cp =
+  if (hasPrefix(line, "/calc ")) {
+    calcCursor =
       line + 6;
 
     double v =
-      parseExpr();
+      expression();
 
     Serial.print(F("= "));
     Serial.println(v, 4);
@@ -3314,7 +3309,7 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/gen ")) {
+  if (hasPrefix(line, "/gen ")) {
     char *p =
       line + 5;
 
@@ -3336,7 +3331,7 @@ static void handleLine(
     if (n > 400)
       n = 400;
 
-    runInference(
+    processInput(
       p,
       0,
       n
@@ -3345,7 +3340,7 @@ static void handleLine(
     return;
   }
 
-  if (startsWith(line, "/set ")) {
+  if (hasPrefix(line, "/set ")) {
     char *p =
       line + 5;
 
@@ -3364,14 +3359,14 @@ static void handleLine(
 
     v = atoi(q);
 
-    if (startsWith(p, "temp")) {
+    if (hasPrefix(p, "temp")) {
       if (v < 0)
         v = 0;
 
       if (v > 100)
         v = 100;
 
-      g_temp =
+      cfgTemp =
         (uint8_t)v;
 
       Serial.print(
@@ -3379,12 +3374,12 @@ static void handleLine(
       );
 
       Serial.println(
-        (int)g_temp
+        (int)cfgTemp
       );
     }
 
     else if (
-      startsWith(
+      hasPrefix(
         p,
         "order"
       )
@@ -3392,10 +3387,10 @@ static void handleLine(
       if (v < 1)
         v = 1;
 
-      if (v > MAX_ORDER)
-        v = MAX_ORDER;
+      if (v > NGRAM_DEPTH)
+        v = NGRAM_DEPTH;
 
-      g_maxOrder =
+      cfgOrder =
         (uint8_t)v;
 
       Serial.print(
@@ -3403,12 +3398,12 @@ static void handleLine(
       );
 
       Serial.println(
-        (int)g_maxOrder
+        (int)cfgOrder
       );
     }
 
     else if (
-      startsWith(
+      hasPrefix(
         p,
         "len"
       )
@@ -3419,7 +3414,7 @@ static void handleLine(
       if (v > 400)
         v = 400;
 
-      g_budget =
+      cfgBudget =
         (uint16_t)v;
 
       Serial.print(
@@ -3427,17 +3422,17 @@ static void handleLine(
       );
 
       Serial.println(
-        g_budget
+        cfgBudget
       );
     }
 
     else if (
-      startsWith(
+      hasPrefix(
         p,
         "seed"
       )
     ) {
-      g_rng =
+      randomState =
         (uint32_t)v *
         2654435761UL +
         1;
@@ -3465,15 +3460,15 @@ static void handleLine(
   );
 }
 
-static char g_in[IN_BUF_LEN];
-static uint8_t g_inN = 0;
+static char inputLine[LINE_CAP];
+static uint8_t inputLength = 0;
 
 void setup() {
   Serial.begin(115200);
 
   delay(100);
 
-  if (!EEPROM.begin(EEP_SIZE)) {
+  if (!EEPROM.begin(STORE_CAP)) {
     Serial.println(
       F("EEPROM emulation initialization failed.")
     );
@@ -3482,46 +3477,40 @@ void setup() {
       delay(1000);
   }
 
-  /*
-    ESP32 supports a larger flash corpus than the old
-    uint16_t implementation. All corpus offsets are now
-    32-bit, so TRAIN_TEXT is no longer silently truncated
-    at 65535 bytes.
-  */
-  g_flashLen =
+  flashBytes =
     (uint32_t)strlen_P(
       TRAIN_TEXT
     );
 
   if (
-    eepRead(0) == EEP_M0 &&
-    eepRead(1) == EEP_M1
+    storageRead(0) == STORE_SIG_A &&
+    storageRead(1) == STORE_SIG_B
   ) {
-    g_eepLen =
-      (uint16_t)eepRead(2) |
+    storedBytes =
+      (uint16_t)storageRead(2) |
       (
-        (uint16_t)eepRead(3)
+        (uint16_t)storageRead(3)
         << 8
       );
 
     if (
-      g_eepLen >
-      EEP_SIZE - EEP_HDR
+      storedBytes >
+      STORE_CAP - STORE_HEAD
     )
-      eepSetLen(0);
+      storageSetLength(0);
   } else {
-    eepSetLen(0);
+    storageSetLength(0);
   }
 
-  buildSegments();
+  discoverSections();
 
-  setScan(255);
+  selectScan(255);
 
-  g_rng ^=
+  randomState ^=
     micros() *
     2654435761UL;
 
-  banner();
+  printBanner();
 
   Serial.print(F("> "));
 }
@@ -3538,14 +3527,14 @@ void loop() {
       continue;
 
     if (c == '\n') {
-      g_in[g_inN] = 0;
+      inputLine[inputLength] = 0;
 
       Serial.println();
 
-      if (g_inN)
-        handleLine(g_in);
+      if (inputLength)
+        dispatchLine(inputLine);
 
-      g_inN = 0;
+      inputLength = 0;
 
       Serial.print(
         F("> ")
@@ -3553,10 +3542,10 @@ void loop() {
     }
 
     else if (
-      g_inN <
-      IN_BUF_LEN - 1
+      inputLength <
+      LINE_CAP - 1
     ) {
-      g_in[g_inN++] =
+      inputLine[inputLength++] =
         (char)c;
     }
   }
