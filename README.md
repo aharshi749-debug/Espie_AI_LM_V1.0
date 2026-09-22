@@ -1,4 +1,4 @@
-# Espie
+# Espie AI LM V1.0
 
 Espie is a local n-gram language model designed to run directly on an ESP32-S3.
 
