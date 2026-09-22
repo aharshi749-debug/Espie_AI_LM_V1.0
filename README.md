@@ -83,7 +83,7 @@ Corpus quality has a major effect on generated text.
 
 ## License
 
-MIT License
+Custom License
 
 Copyright (c) 2026 Aharshi
 
