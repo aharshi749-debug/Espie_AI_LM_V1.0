@@ -1,172 +1,70 @@
-# Espie-AI-SGM-runs-on-16kb-
+# Espie
 
-A small AI SGM model meant for small ESP32 Devices, Conceptually works like a LLM, but natively for an ESP32
+Espie is a local n-gram language model designed to run directly on an ESP32-S3.
 
-# What is Espie?
+It does not use an API, cloud AI service, or external LLM runtime. The model, corpus, inference system, sampling system, and command interface run locally on the microcontroller.
 
-Espie is a small AI SGM where it is like a AI but runs completely locally on a ESP32 with no api or external files (meaning no Openai, groq or any of that is used at all)
+Espie can have conversations, complete sentences, generate longer pieces of text, use topic-specific corpus sections, retrieve verified facts, learn additional prose, and expose its internal behavior through debugging and control commands.
 
-# Why this matters?
+## Features
 
-Because Since Espie runs on a literal microcontroller, this demonstrates that modern AI doesnt need
+- Local language generation on ESP32-S3
+- N-gram language model
+- Corpus-based text generation
+- Conversation detection
+- Sentence completion
+- Topic-based generation
+- Factual knowledge retrieval
+- `/story` long-form generation
+- `/raw` unrestricted literal completion
+- `/gen` controlled token generation
+- `/topic` corpus section selection
+- `/learn` persistent user-provided learning
+- `/forget` learned-data removal
+- `/class` text classification
+- `/calc` arithmetic expression evaluation
+- Temperature control
+- N-gram order control
+- Generation-length control
+- Reproducible RNG seeds
+- Inference debug tracing
+- Runtime statistics
+- Generation benchmarking
+- No internet connection required for inference
 
--GPU clusters
+## Hardware
 
--Water cooling
+Espie is designed for the **ESP32-S3**.
 
--Terabytes of Ram
+The exact amount of available RAM and flash depends on the ESP32-S3 board being used.
 
--20 megawatts of serious power
+The project is particularly suited for boards with enough flash and RAM to store the corpus and run the inference system comfortably.
 
-because Espie runs on
+## Requirements
 
--16 KB SRAM Arena and actual 1.4kb being used
+### Hardware
 
--No water cooling
+- ESP32-S3 development board
+- USB connection
+- Computer for uploading the firmware
 
--usually Mah Or sips on small watts per hour
+### Software
 
--512/520 kb of SRAM and sometimes just an extra 8MB of PSRAM (sometimes may be 4mb or 2mb but will vary)
-
-AND This demonstrates that an AI text-generation system can run locally on a microcontroller with a very small SRAM working set as low as......16kb...
-# What is Espie made out of?
-
-Espie is a AI SGM, not a true llm at all, 
-
-and AI SGM means
-
-Artifical Intelligence Script Generator Model
-
-which means this consists of
-
--Script/Logic
-
--Generator Output and Input parser
-
--Dataset that the Script/Logic references 
-
-meaning this is wayy smaller.
-
-the only thing what makes Espie similar to an LLM , is that it just uses temperature sampling but other than that it is fundamentally different
-
-
-
-# QuickStart/Setup for Espie
-
-Step 1: Train Espie by downloading the py and make sure having PyTorch installed
-
-Step 2: Copy the ino file into arduino ide
-
-Step 3: Compile and flash onto a ESP32 chip 
-
-Step 4: Start training the py file, wait until its trained, when its done it should spit out a file named "Espie_1_6_v6m.bin" or a similar file, then go to this site
-
-https://espressif.github.io/esptool-js/
-
-Step 5: There will be a box , change it to 0x3A0000 , like in the image
-
-
-<img width="751" height="453" alt="image" src="https://github.com/user-attachments/assets/67a7fd2a-9058-4484-b140-4d36dcb09163" />
-
-Step 6: Once you have it ready, click on "Choose File" and select the bin file you just got from training Espie
-
-Step 7: Click the big blue button that says "PROGRAM" to flash it
-
-Step 8: after it finished, press the RST button on your ESP32 and head to serial monitor and press it Again
-
-Step 9: you should be able to start typing and then it would respond back!
-
-
-
-# Notes
-
-Espie needs
-
-ESP32
-
-No cooling
-
-and its extremely efficient!
-
-# How Espie actually works
-
-internally its
-Input
-
- ↓
-
-Parser
-
- ↓
-
-Intent / context
-
- ↓
-
-Script selection/generation
-
- ↓
-
-Small model inference
-
- ↓
-
-Sampling
-
- ↓
-
-Output  (I HATE COPY AND PASTING "↓" HELP!)
-
-# Credits to
-
--Elias, Joel, my best friends, idk what they did even to this project but idk i just calling him out but i did everything in this project
-
-
-# A few things to keep in direct mind
-
-I am sorry if its not enough at all, because i am 12 and like i am busy for like....my entire day because i am releasing a new OS soon so like i am sorry if it aint enough, but if you got anything to say, go ahead! go and say it out!
-also i will make a few files that are named
-"NOTES.txt" that will contain my notes for the full thing on a AI SGM so thanks for cooperating guys (or whoever is reading this)
-
-
-# Benchmarks and some actual technical info
-
-Benchmarks and technical information here
-
-Hardware:
-- CPU: ESP32-S3
-- Test board: LILYGO T-Display S3
-
-Memory:
-- Model flash: ~1.6 MB
-- Total flash consumption: ~1.7 MB
-- Reserved SRAM arena: 16 KB
-- Measured Espie working usage: ~1.4 KB
-- Context buffer: 256 bytes
-
-Performance:
-- Generation: ~15–30 tokens/second
-
-Toolchain:
 - Arduino IDE
-- Espressif ESP32 core 2.0.11
+- ESP32 Arduino board support
+- ESP32-S3 board configuration
 
-# Files and stuff you need if you dont need Bloat
+## Installation
 
-Espie.ino
+1. Install the Arduino IDE.
 
-param.py (to teach espie to get the bin)
+2. Install ESP32 board support through the Arduino Board Manager.
 
-Instructions.txt
+3. Open the Espie project.
 
-License   (read this please!)
+4. Make sure the project contains:
 
-# Extra Files that aren't needed (optional, but read them)
-
-Readme
-
-
-
-
-
-GO NUTS HEHEHAHAHAHAHAHAHHAH YOU HAVE SOME NEW TECH TO FORK (with my permission) AND BLAH BLAH BLAH
+```text
+Espie/
+├── Espie.ino
+└── training_data.h
