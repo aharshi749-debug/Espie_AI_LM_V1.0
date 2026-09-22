@@ -78,18 +78,9 @@ Modify `training_data.h` to change or expand the corpus.
 Corpus quality has a major effect on generated text.
 
 ## Credits
-Original AI LM by Elias Beltran
 
-Espie AI LM developed by Aharshi Deb
+(Check the file named Explanation.txt for the full credits)
 
-(Check the file named Explanation.txt for the full credits and some lore)
-Website shown in the images: https://terminal.spacehuhn.com/
-
-GitHub: @aharshi749-debug
-
-Wokwi: https://wokwi.com/projects/470533331374442497
-
-Notice: Wokwi link is always guaranteed to be updated more frequently than the github repo.
 ## License
 
 MIT License
