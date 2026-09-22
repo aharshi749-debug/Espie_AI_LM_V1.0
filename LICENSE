@@ -1,4 +1,4 @@
-Espie License v1.0
+Espie License v1.5
 ==================
 
 Copyright (c) 2026 Aharshi
@@ -10,9 +10,8 @@ Redistribution, modification, or creation of derivative works (including forks)
 is NOT permitted without prior written permission from the author.
 
 You may:
-- Download and run the provided binary files on supported ESP32 hardware.
-- Study the source code for learning purposes.
-- Share links to this repository.
+-Download, compile and modify the project WITHOUT distruibuting the modified version
+-Share this github repo with friends or family
 
 You may NOT:
 - Fork this repository without explicit permission.
@@ -20,6 +19,6 @@ You may NOT:
 - Use the source code in commercial projects without permission.
 - or release Modified versions online without direct permission from me.
 To request permission for forking or redistribution, please contact the author
-via GitHub.  (Gmail ofcourse)
+via GitHub.  (Gmail of-course)
 
 THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
