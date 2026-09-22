@@ -33,7 +33,9 @@ Then type normally:
 
 Hi
 
-Espie can also complete text:## Commands
+Espie can also complete text:
+
+## Commands
 
 Espie includes a built-in command system.
 
