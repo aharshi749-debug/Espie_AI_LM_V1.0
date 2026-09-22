@@ -1,0 +1,22 @@
+So, if you are here for the full credits, yes, I will fully credit everyone 
+
+Elias Beltran:
+
+-Original AI LM 
+
+-Commands, Ui, basically everything made here derived from his source code
+
+Aharshi Deb
+
+-Espie AI LM was derived and created and fully fixed from Elias Beltran's source code
+
+Elias Github repo: https://github.com/AverageCatUser/uhh-ai-model-for-le-arduino
+
+
+For the full thing, Elias made an AI a while back and I fell in love with it, it was so perfect.
+
+But there was an issue, it hallucinated, it was a horrible mess to me. wasn't really usable without major changes
+
+So I took the source code, Ported it, and rewrote several subsystems for the Output/Generation system to make sure it wasn't as flawed as the first MegaLM
+
+Funny story: I nicknamed MegaLM as Hal-Bot since it hallucinated so much 
