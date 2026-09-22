@@ -5,7 +5,7 @@ Espie is a local n-gram language model designed to run directly on an ESP32-S3.
 It generates text locally without APIs, cloud services, or external LLM runtimes.
 
 ## Features
-## JHEFIADJFIAJF
+
 - Local n-gram language model
 - Conversation and sentence completion
 - Topic-based generation
@@ -33,7 +33,7 @@ Then type normally:
 
 Hi
 
-Espie can also complete text:
+Espie can also complete text: E.G "ESP32 is" and it will finish it.
 
 ## Commands
 
