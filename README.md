@@ -83,7 +83,9 @@ Ui idea by Elias, fully implemented by Aharshi Deb.
 Created and developed by Aharshi.
 
 Images of the website: https://terminal.spacehuhn.com/
+
 GitHub: @aharshi749-debug
+
 Wokwi: https://wokwi.com/projects/470533331374442497
 
 Notice: Wokwi link is always guaranteed to be updated more frequently than the github repo.
