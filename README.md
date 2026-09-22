@@ -79,8 +79,10 @@ Corpus quality has a major effect on generated text.
 
 ## Credits
 Ui idea by Elias, fully implemented by Aharshi Deb.
+
 Created and developed by Aharshi.
-Images of the website: 
+
+Images of the website: https://terminal.spacehuhn.com/
 GitHub: @aharshi749-debug
 Wokwi: https://wokwi.com/projects/470533331374442497
 
