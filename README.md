@@ -2,69 +2,78 @@
 
 Espie is a local n-gram language model designed to run directly on an ESP32-S3.
 
-It does not use an API, cloud AI service, or external LLM runtime. The model, corpus, inference system, sampling system, and command interface run locally on the microcontroller.
-
-Espie can have conversations, complete sentences, generate longer pieces of text, use topic-specific corpus sections, retrieve verified facts, learn additional prose, and expose its internal behavior through debugging and control commands.
+It generates text locally without APIs, cloud services, or external LLM runtimes.
 
 ## Features
 
-- Local language generation on ESP32-S3
-- N-gram language model
-- Corpus-based text generation
-- Conversation detection
-- Sentence completion
+- Local n-gram language model
+- Conversation and sentence completion
 - Topic-based generation
-- Factual knowledge retrieval
-- `/story` long-form generation
-- `/raw` unrestricted literal completion
-- `/gen` controlled token generation
-- `/topic` corpus section selection
-- `/learn` persistent user-provided learning
-- `/forget` learned-data removal
-- `/class` text classification
-- `/calc` arithmetic expression evaluation
-- Temperature control
-- N-gram order control
-- Generation-length control
-- Reproducible RNG seeds
-- Inference debug tracing
-- Runtime statistics
-- Generation benchmarking
-- No internet connection required for inference
-
-## Hardware
-
-Espie is designed for the **ESP32-S3**.
-
-The exact amount of available RAM and flash depends on the ESP32-S3 board being used.
-
-The project is particularly suited for boards with enough flash and RAM to store the corpus and run the inference system comfortably.
+- Factual knowledge system
+- Learning system
+- Long-form generation
+- Configurable generation
+- Debugging and benchmarking
+- Offline operation
 
 ## Requirements
 
-### Hardware
-
-- ESP32-S3 development board
-- USB connection
-- Computer for uploading the firmware
-
-### Software
-
+- ESP32-S3
 - Arduino IDE
 - ESP32 Arduino board support
-- ESP32-S3 board configuration
 
 ## Installation
 
-1. Install the Arduino IDE.
+1. Open `Espie.ino` in Arduino IDE.
+2. Select your ESP32-S3 board.
+3. Upload the firmware. (WARNING, MUST DO FIRST: HAVE THE FILES NAMED Espie.ino AND training_data.h OR IT WONT COMPILE AT ALL.)
+4. Open Serial Monitor at `115200` baud.
 
-2. Install ESP32 board support through the Arduino Board Manager.
+Then type normally:
 
-3. Open the Espie project.
+Hi
 
-4. Make sure the project contains:
+Espie can also complete text:## Commands
 
-```text
-Espie/
-├── Espie.ino
-└── training_data.h
+Espie includes a built-in command system.
+
+Run:
+
+/help
+
+to see all available commands and their usage.
+
+## Modifying Espie
+
+Main files:
+
+Espie.ino
+training_data.h
+
+Modify `Espie.ino` to change the firmware and model behavior.
+
+Modify `training_data.h` to change or expand the corpus.
+
+Corpus quality has a major effect on generated text.
+
+## Credits
+
+Created and developed by Aharshi.
+
+GitHub: @aharshi749-debug
+Wokwi: https://wokwi.com/projects/470533331374442497
+
+Notice: Wokwi link is always guaranteed to be updated more frequently than the github repo.
+## License
+
+MIT License
+
+Copyright (c) 2026 Aharshi
+
+See `LICENSE` for the full license.
+
+## Disclaimer
+
+Espie is a probabilistic n-gram language model. Generated text is not guaranteed to be accurate.
+
+Espie v1.0 - Local AI on ESP32-S3.
