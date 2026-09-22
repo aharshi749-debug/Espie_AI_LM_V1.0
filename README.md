@@ -78,10 +78,10 @@ Modify `training_data.h` to change or expand the corpus.
 Corpus quality has a major effect on generated text.
 
 ## Credits
-Ui idea by Elias Beltranfully implemented and programmed by Aharshi Deb.
+Ui idea by Elias Beltran. fully implemented and programmed by Aharshi Deb.
 Command Style by Elias Beltran, Fully implemented and programmed by Aharshi Deb
 
-Created and developed by Aharshi.
+AI LM and other internal code Created and developed by Aharshi.
 
 Website shown in the images: https://terminal.spacehuhn.com/
 
