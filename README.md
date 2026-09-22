@@ -78,7 +78,7 @@ Modify `training_data.h` to change or expand the corpus.
 Corpus quality has a major effect on generated text.
 
 ## Credits
-
+Ui idea by Elias, fully implemented by Aharshi Deb.
 Created and developed by Aharshi.
 Images of the website: 
 GitHub: @aharshi749-debug
