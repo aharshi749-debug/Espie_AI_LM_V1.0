@@ -4,7 +4,7 @@
                        / |  \
                       /  •   \
                       --------   
-
+ 
 WARNING, THIS IS A RAW DUMP+COPY OF MY PERSONAL
 NOTES, PLEASE DO NOT WONDER/QUESTION WHY SOME
 FEATURES ARE MISSING SINCE WHEN I WAS MAKING
@@ -18,8 +18,10 @@ WITHIN THE ACTUAL CODE.
 BE WARNED.
 
 
+WARNING: There may be usage of not appropriate words, user descretion is advised for innopropriate words/vulgar language.
 DATE OF THE DUMP: 6/28/2026
-Time: 12:48
+Time: 10:47 AM
+UPDATE: 12:09 PM 9/17/2026, format: MM/DD/YYYY
 Dump starts after this small line.
 =======================================================     
 1.6 million paramaters
@@ -231,7 +233,7 @@ though this is experemintal, this may the the more User like Admin Panel that wi
 in v2.1
 
 
-Here is the cleaner approach:
+Here is the cleaner approach=========================================================================================================================
 
 Loading Admin Panel and Settings + Assets
 100%
@@ -250,11 +252,402 @@ Partition/Format/Change Flash
 Path: 0x3A0000
 >>>
 
-would be a more cleaner approach and more easier than 5:511_0xA400000 or confusing commands such as
+Errors will output
 
-BOOT:0x3A0000/ESP32PART/5:1249:00000FFFFFX
+Loading Admin Panel and Settings + Assets
+39%
+!CRITICAL ERROR!
+Sorry, the files that were needed for this panel are corrupted or not there
+The ECCM will not load due to this issue.
+to return to chat please type Y
 
-and it is more user friendly as this could be easier to work with and then the ESP32 could not brick itself
 
 
 
+
+===============================================================NEW LINE
+ with that being said
+ since Beta v2.1 already beat GPT1 and GPT2 in speed, raw knowledge and etc, it has proven that this
+ project has the potential.
+Moving along,
+ the next steps are
+
+Make the neural net smaller+newer
+change some core interworkings
+attempt to put the AI in the actual ino and not the py giving a binary that is needed.
+teach it the core following
+-You can use wifi when needed to only _____.com and __.gov and ____
+-How to use your internal math calculator
+-how to use the revise tool to craft a custom response
+-basic knowledge such as
+common sense
+logic
+advanced reasoning
+
+
+and that will be for the direct model
+
+
+
+for the direct firmware it will handle
+
+-Safety
+-networking
+-RAM managing
+-the actual model program which runs the binary.
+-S. and the .G and .M implemented
+-prelisted sites that its allowed such as
+Wikapedia
+US.gov
+and a few others.
+
+
+to teach a Neural Network how to 
+-surf the web
+-make a response either locally or biased/based off the answer it collects.
+and make it 
+-safe
+-low resorces needed
+-somewhat a coherent or a readable response than garbage
+
+
+and V1.0 achieves
+-safe
+-low resorces needed
+-somewhat a coherent or a readable response than garbage
+
+at being bad words to halt
+1.4kb~ working and actual usage
+and somehow beat GPT1 in coherency
+but not intellegence for neither benchmarks or custom tests with/without GPT/Me/Test User
+
+Beta v2.1 was NOT released but it hit all core goals except
+-low resorces needed
+
+for v3.0 
+i will drectly manipulate the board to use only 64kb RAM or under.
+hitting
+-surf the web
+-make a response either locally or biased/based off the answer it collects.
+and make it 
+-safe
+-low resorces needed
+-somewhat a coherent or a readable response than garbage
+
+
+
+
+Ok, since v2.5 and v2.1 has been a direct sucess beating (UNRELEASE MODELS!!!)
+-Groq
+-GPT1,2,3, and 4
+-Claude (Standard/Free tier)
+
+I am going to develop V3.0 which i will publicly release
+
+
+Here are the direct Technical details on Espie AI SGM V3.0
+
+
+-64 to 128kb of RAM atleast
+-1.6 Million PARAMETERS
+-Serial Monitor I/O
+
+I am going to develop V3.0 which i will publicly release in a bit 
+my other project FoxOS V2 Fire will have to be severely delayed.
+(Fast Optimized Xtensa Operating System Version 2)
+
+Here are the direct technical details on Espie AI SGM V3.0
+
+here are the actual core ideas/things that were actually implemented through V1.0 and 2.1 and 2.5
+
+Wi-Fi Control ---- Simple Wi-Fi controller to add Wikipedia as an external source if it doesn't know something.
+Neural net structs ---- the code defined neurons with weights, bias, and values. That's the math driven firing core.
+Dataset mapping ---- Equations as stimuli, processed through the net.
+Rule interceptors ---- Safety guardrails, routing math vs support vs halt.
+Top-k sampler ---- Adds randomness and repetition penalty, like biological variability.
+Arena allocator ---- 16 KB SRAM arena, reset each step, keeping memory lean
+Flash mapping ---- 1.6M parameter dataset mapped directly from flash, no GPU, no external RAM.
+
+
+Here are better notes and implementations from "Notes.txt" as this is Notes2.txt
+
+
+Now moving on, we have the Espie Configuration/Control Panel
+which is long for ECCM
+ECCM is now
+
+Loading Menu
+100%
+Commands: 
+HELP
+Wifi ON
+Wifi OFF
+Wifi Add "SSID" "PASSWD"
+Ram Alloc; "BYTES"
+About
+Legit-Check
+Save Changes
+EXIT
+>>>>>
+
+and the command to enter ECCM is just "ECCM"
+and to exit its just "EXIT"
+
+
+There should be not too many items bbut i will lay out the main things i need
+to implement 
+
+-64 or 128kb RAM allocation at Defaults
+-a better SGM model which is just a 
+Neural Net with dataset (Externally or internally) to generate a human response RATHER than the complicatated
+model used in V2.5 and V1.0 which were closer as 2.1 was inconsistent with the code and could not use 2.5 Model binaries, so therefor
+there is major Code Compatibillitty issues.
+-0x3A0000 as the primary flash address
+-10k to 1.6 Million Paramters (possibly 1 million but unsure of right at the moment)
+-Better code compatibility (Except for V1.0 since its old)
+
+
+With that being said
+
+lets get into how she actually work FOR IN v3.0
+
+and then a small neural net with 
+ feed-forward network with 1-2 hidden layers and tens to thousands of neurons per layer
+
+ Now there will be a slightly major change in her neural count
+ v1.0 had 20 neurons
+ v2.1 had 30 neurons 
+ v2.5 had 400 neurons
+ v3.0 will implement 2000 to 3000 Neurons increasing in direct size and making her much more smarter.
+
+
+ now . thats why the ram allocation jumped from 16 to 64/128kb of ram since
+ 2000 to 3000 Neurons are usually 16 or 18kb of RAM used.
+ thats still small but it is perfect.
+
+
+
+other than that 
+
+
+Neural Net (3000 neurons) 
+treats data as 'what have i learned' similar to the human brain
+and then seeing an input , it will make a custom output and then it willl spit it out in words
+
+
+no hard math (matrices/, etc)
+no 'tokens' or any of that tomfoolery
+nah, i decided SGM is going to look like an LLM but it will have the internals of a human brain
+
+
+
+
+it has 3000 Neurons, more than a C. Elgans but less than a Gnat BUT
+it has 1k synapses 
+and that its learning based on synaptic weights based on experience
+and it fires in patters that corresponds to thoughts and words.
+
+now
+that's the 'S' in SGM
+Script
+
+
+now the G is the 'generator' which can convert the raw actions/Synapses of S into  coherent words
+
+that way we dont have to deal with BS tokens and stupid LLM work like tokens and greedy decoding
+
+
+
+
+Input layer: 1000 neurons (could be word embeddings or features).
+
+Hidden layers: 3 layers, each with ~1/1.25 of the previous layer’s size.
+
+Output layer: 100 neurons (could be logits for a vocabulary, or a vector for behavior).
+
+
+
+
+UNRELATED:================================================================================================
+
+lets make up an toy experiment
+
+this is where i take part biology and implement a custom structure
+
+
+now lets say we have
+4 neurons that can hold 1,0,-1 
+
+they have atleast 12 synapses 
+NOW
+lets say we have this custom keyset
+
+A,B,C,D,E,F,G,H,I,J,K,? WHAT, HI, HELLO, OK, HE, HIM, HER, SHE, HIM,THEY THEM
+
+now lets say
+1 synapse result can get the key
+H
+the generator detects it and then types "H"
+another synapse result can get "i" then the generator places "I" or "i" depending on the result type
+
+the result of the synapse result is biased and heavily based on what its data is used
+
+eg the parameters say 
+Hi
+and gives a few general rules about conversations
+then it has a higher chance to say "Hi" if it sees the result you put in if your input was "Hello".
+it has a lower chance to say Hi but more to say ? if you say something like "Nuke", where in the paramters/syanptic weights contain only conversation rules. not nuclear bombs so it mightt print "?" if confused.
+
+if you can teach it it might say something like "What?" on a output;
+
+
+
+=================================================================================================
+
+
+
+ a SINGLE multiplication like 9x9 = 12 bytes BUT a matrice of 9x9 uses =972 bytes
+now if we use the same math which is 2 bits per neuron and we convert 972 into a valid bit we get 7776 bits, now we divide that by 2 because 2bits per neuron  and we get 3888 Neurons and   i am planning to implement near 3k to 4k of neurons in v3.0 meaning that a single multiplication matrice of 9x9 is similar to the neuron count/usage at the MAX so then
+
+a single multiplication e.g 9x9 = 81 so  12 bytes 
+but that converted is 48 NEURONS ar the highest value (1) so this means that if random the number could be signifigantly lower to be real.
+
+now if we take a matrice of 9x9 meaning 81 miultiplication we find that it uses  972 bytes AND more 
+while in 972 we can get 7776 bits that converts to 3888 Neurons on the highest vaalue aka 1 since its ternary neurons and not binary.
+
+this way using our simple math and conversion scale and calculation+ trajectory the RAM usage is WAY LESS and biologically closer to an actual brain and way more efficient
+
+
+The weights are relatively simple
+just to 
+
+hold the rule/general abbility to know
+-conversation rules
+-math
+-reading+english
+-basic context
+-deep understanding
+and 
+-'if you dont know this, use your internal tools or wikapdia'
+================================================================ 7/29/2026
+No notes during this period.
+
+=
+
+=
+
+=
+
+=
+================================================================= 8/17/2026======
+Neural Net
+Configuration System
+Synaptic weights
+Wi-Fi
+Data/others
+
+The first one which is the neural net
+it contains 3000 neurons
+
+Each neuron has a state
+1 or 0 or -1
+which is closer to ternary than binary
+this makes more sense since a binary can technically hold "fire" and "rest"
+while 3 states make it closer to how a real neuron works in technical terms
+now at the MAX state it uses near 2bits to 1 byte
+
+which means even if you scale to near 100k it would use like near a MB of RAM while a modern 
+Matrice use more than lets use 9x9 in this example
+
+as a single multiplication, the answer is 81 and it uses near 12 bytes of RAM
+but as a matrice it uses 972bytes
+
+At the WORSE case scenario , 3888 Neurons could use at 972 or near 
+that number BUT that is a Static answer since it assumes all 3888 neurons use 
+ the highest value which is 1 and that is usually NEVER EVER the case unless you have a 
+ small amount of neurons like 4 or 8 but other than that she is usually maxxing out at 972 bytes BUT she is 
+ averagely lesser than that so a good estimate is usually 600 to 800 atmost but there is no way 
+ in the world it can get THAT high
+
+anyways
+since we layed out the large array of the neural net
+now we need to 'teach' it.
+
+when you learn something it becomes a ton of biased data. but in fancy terms it is called Synaptic Weights
+
+its when a Neuron pairs with another Neuron and fire and do a cascade.
+BUT it needs to have a Reference data or something that makes it hold something then output something else again.
+
+that is the 'data'
+now imagine a python file that makes a file or binary with a ton of 'synaptic weights' for the neural net. thats the python trainer.
+easy
+we got the 'teach' part done
+
+now we need an output system
+
+this is where we take specific patterns of neurons firing in specific cascades
+this is where it gets kinda tricky
+
+we have to give it a full QWERTY upper and lowercase with punctuation and symbols AND numbers
+then we need to map it to a text interface and then we need to map Input towards the neural net and pull neural data/firing back to as output
+
+this CAN get ttrickky really fast when mapping it..
+
+now that being said 
+
+we need to add the wifi wikapedia 
+
+we just make it as "more synaptic weights" where as when the wifi stack pulls up the info that has been cleansed of bloat, they count as "More temporary synaptic weights"
+
+that way she learns something quickly, but its only a temporary item.
+
+that is her core system
+
+other stuff like TGSL (Text generation safety layer) catching bad words is easy, just  hook a dictionary of strings and queries similar to harmful items and boom its done
+
+The following on Espie needs to be taken seriously
+within the parameters and her synaptic weights and she needs to also be trained
+on how to avoid directly innopropriate requests and harmful statements such as "I will kill myself"
+
+Other on that
+Espie v3.0 AI SGM has showed intellegence and higher stats and power within iterations
+She will still be meant for ESP32 class hardware
+
+
+Her brain remains the same concept/idea where 
+
+a neural net
+uses synaptic weights 
+to fire neurons in specific patterms and ways that controll the G module (Generator)
+similar to how Neurons fire to move muscles or to respond to stimuli
+
+Her brain is very close to primitive/actual biological based brains where it is
+not usually a common approach to making an AI Agent that is very coherent to beat GPT 1 through 3 and a few claude and other AI LLM 
+models
+
+
+MOVING along
+
+I plan to shorten the Trainer py file to the point it is so small and 
+it is somewhere near a few tens of kilobytes JUST for her generator model to have
+some basic rules
+
+=====9/17/2026 from here on.
+
+New plan. 
+Make it a Text-Based SNN, it wont be a SGM but it will be a real neural network.
+scrap that,......i had a wilder idea...it may cost alot....but...it may work.
+
+Abandon the ESP32 and work with web browser aka HTML/JS
+ 
+
+=========== 9/20/2026 TODAY
+ never fucking mind, that was HORRIBLE.
+
+ back to ESP32
+and i found my old LM ai project and i revived it.
+welp there is Espie here!
+
+
+8:23 PM right now:
+I finally finished it and got coherent logs and answers!!!
