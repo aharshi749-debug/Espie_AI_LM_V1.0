@@ -81,6 +81,8 @@ Corpus quality has a major effect on generated text.
 Ui idea by Elias Beltranfully implemented and programmed by Aharshi Deb.
 Command Style by Elias Beltran, Fully implemented and programmed by Aharshi Deb
 
+Original AI LM was Elias work
+
 Created and developed by Aharshi.
 
 Website shown in the images: https://terminal.spacehuhn.com/
