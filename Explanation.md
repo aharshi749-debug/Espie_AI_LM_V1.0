@@ -31,3 +31,9 @@ That project eventually became Espie. MegaLM was the earlier foundation. Espie i
 ## Funny Story
 
 I nicknamed the original MegaLM "HAL-BOT" because of how much it hallucinated.
+
+## Images and others
+1: Website shown in the images: https://terminal.spacehuhn.com/
+2: GitHub: @aharshi749-debug
+3: Wokwi: https://wokwi.com/projects/470533331374442497
+4: Notice: Wokwi link is always guaranteed to be updated more frequently than the github repo.
