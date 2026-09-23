@@ -39,11 +39,20 @@ An RNN processes information one step at a time while keeping a hidden state. Th
 Espie's RNN takes an input word, processes it through the hidden state, and predicts what word should come next. It repeats this process to generate a response.
 
 ## User Agreement
-If you are going to compile, you agree to these rules
--Do not modify and redistribute without my permission (Gmail me if you need permission or something else)
--
+
+If you compile this project, you agree:
+
+- Do not modify or redistribute it without my permission.
+- Do not exploit loopholes to use it without permission.
+- Contact me at aharshi749@gmail.com if you need permission.
+
 ## Thanks for Reading!
 
 Oh god, you read the full readme. Nobody ever does such a thing!
 
-If there are any problems or major bugs, go ahead and contact me at aharshi749@gmail.com, I will be pleased to hear from you
+
+## Other platforms and contact
+Wokwi: https://wokwi.com/projects/475909228053847041
+Gmail: aharshi749@gmail.com
+
+Notice: Wokwi is more likely to be updated than this repo, BUT all items in wokwi are always beta and not final. Be aware please.
