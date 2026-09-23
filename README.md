@@ -38,6 +38,10 @@ An RNN processes information one step at a time while keeping a hidden state. Th
 
 Espie's RNN takes an input word, processes it through the hidden state, and predicts what word should come next. It repeats this process to generate a response.
 
+## User Agreement
+If you are going to compile, you agree to these rules
+-Do not modify and redistribute without my permission (Gmail me if you need permission or something else)
+-
 ## Thanks for Reading!
 
 Oh god, you read the full readme. Nobody ever does such a thing!
