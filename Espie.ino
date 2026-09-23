@@ -1,3 +1,6 @@
+// (c) Aharshi Deb, 2026
+// This is Espie V2.0
+// If you are compiling this then you have agreed to the rules at the bottom of README.md.
 #if !defined(ARDUINO_ARCH_ESP32)
 #error "Espie V2.0 requires Arduino-ESP32."
 #endif
